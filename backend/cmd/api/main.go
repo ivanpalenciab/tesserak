@@ -1,0 +1,89 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"tesserak/backend/internal/config"
+	"tesserak/backend/internal/crm"
+	"tesserak/backend/internal/database"
+	"tesserak/backend/internal/empresas"
+	"tesserak/backend/internal/usuarios"
+)
+
+func main() {
+	migrateOnly := flag.Bool("migrate", false, "aplica las migraciones y termina")
+	skipMigrate := flag.Bool("skip-migrate", false, "no aplica migraciones al iniciar")
+	flag.Parse()
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+	gin.SetMode(cfg.GinMode)
+
+	db, err := database.Connect(cfg.DatabaseURL, cfg.GinMode == gin.DebugMode)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !*skipMigrate {
+		if err := database.Migrate(db); err != nil {
+			log.Fatal(err)
+		}
+		log.Println("migraciones aplicadas")
+	}
+	if *migrateOnly {
+		return
+	}
+
+	r := gin.New()
+	r.Use(gin.Logger(), gin.Recovery())
+
+	r.GET("/health", func(c *gin.Context) {
+		sqlDB, err := db.DB()
+		if err != nil || sqlDB.PingContext(c.Request.Context()) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "db_down"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	api := r.Group("/api/v1")
+	empresas.NewHandler(empresas.NewService(empresas.NewRepository(db))).RegisterRoutes(api)
+	usuarios.NewHandler(usuarios.NewService(usuarios.NewRepository(db))).RegisterRoutes(api)
+	crm.NewHandler(crm.NewService(crm.NewRepository(db))).RegisterRoutes(api)
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		log.Printf("API escuchando en :%s", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("error cerrando servidor: %v", err)
+	}
+	log.Println("servidor detenido")
+}
