@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"tesserak/backend/internal/auth"
 	"tesserak/backend/internal/config"
 	"tesserak/backend/internal/crm"
 	"tesserak/backend/internal/database"
@@ -47,7 +48,7 @@ func main() {
 	}
 
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware(cfg.CORSOrigin))
 
 	r.GET("/health", func(c *gin.Context) {
 		sqlDB, err := db.DB()
@@ -59,6 +60,7 @@ func main() {
 	})
 
 	api := r.Group("/api/v1")
+	auth.NewHandler(auth.NewService(db, cfg.JWTSecret)).RegisterRoutes(api)
 	empresas.NewHandler(empresas.NewService(empresas.NewRepository(db))).RegisterRoutes(api)
 	usuarios.NewHandler(usuarios.NewService(usuarios.NewRepository(db))).RegisterRoutes(api)
 	crm.NewHandler(crm.NewService(crm.NewRepository(db))).RegisterRoutes(api)
@@ -86,4 +88,17 @@ func main() {
 		log.Printf("error cerrando servidor: %v", err)
 	}
 	log.Println("servidor detenido")
+}
+
+func corsMiddleware(allowOrigin string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", allowOrigin)
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
 }

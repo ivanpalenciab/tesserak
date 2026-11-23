@@ -3,6 +3,7 @@
 Plataforma SaaS multi-empresa para gestión comercial y operativa (empresas, usuarios, CRM, terceros, productos, inventario, ventas, compras y lealtad).
 
 - **Backend:** Go + Gin + GORM + PostgreSQL 14+
+- **Frontend:** Angular 22 + TypeScript + SCSS + Vitest
 - **Migraciones:** SQL versionado con `golang-migrate` (embebidas en el binario)
 
 ---
@@ -43,7 +44,9 @@ Plataforma SaaS multi-empresa para gestión comercial y operativa (empresas, usu
 | **Migraciones SQL** | Completado (`000001` y `000002`) | 12 tablas creadas con FKs compuestas multi-tenant, soft delete, índices únicos parciales y constraints `CHECK`. |
 | **CRUD Empresas** | Completado | `/api/v1/empresas` con filtros, paginación, identificador fiscal único activo y soft delete. |
 | **CRUD Usuarios** | Completado | `/api/v1/usuarios`, usuario vinculado a una sucursal, email y username únicos por empresa, `bcrypt`, soft delete. |
+| **Autenticación (Backend)** | Completado | `POST /api/v1/auth/login` con `bcrypt`, JWT HS256, soporte multi-empresa (`identificador_fiscal` opcional) y CORS. |
 | **Módulo CRM** | Completado | `/api/v1/crm/*`: orígenes, estados del pipeline, motivos de descarte, leads, cambio de etapa, conversión, actividades/agenda, intereses en productos y resumen de KPIs. |
+| **Frontend Angular (Login)** | Completado | Proyecto en `frontend/` con pantalla de login, `AuthService` (signals), interceptor Bearer, guards (`/login`, `/dashboard`) y pruebas con Vitest. |
 | **Pruebas unitarias de validación** | Completado | 35 casos de prueba HTTP pasando (`usuarios`: 9, `empresas`: 9, `crm`: 17). |
 | **Pruebas de integración con PostgreSQL** | Pendiente | Pendiente ejecutar con Docker Desktop encendido para validar migraciones y consultas en vivo. |
 
@@ -88,7 +91,27 @@ Plataforma SaaS multi-empresa para gestión comercial y operativa (empresas, usu
 
 ## Cómo ejecutar localmente
 
-Requisitos: **Go 1.22+** y **Docker Desktop** (o una instancia local de PostgreSQL 14+).
+### Opción A: Todo dockerizado (recomendado)
+
+Requisitos: **Docker Desktop**.
+
+```powershell
+# Desde la raíz del repositorio: levanta PostgreSQL, Backend Go y Frontend Angular
+docker compose up -d --build
+```
+
+- **Frontend:** `http://localhost:4200`
+- **Backend API:** `http://localhost:8080/health`
+- **PostgreSQL:** `localhost:5432` (BD `tesserak`, usuario/contraseña `tesserak`)
+
+Para detener todo:
+```powershell
+docker compose down
+```
+
+### Opción B: Desarrollo local sin contenedores de app
+
+Requisitos: **Go 1.22+**, **Node 22+** y **Docker Desktop** (o PostgreSQL 14+).
 
 ```powershell
 # 1. Ir al directorio del backend

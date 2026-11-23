@@ -1,0 +1,2 @@
+ALTER TABLE paises
+    DROP COLUMN IF EXISTS nombre;

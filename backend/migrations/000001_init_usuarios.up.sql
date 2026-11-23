@@ -8,6 +8,7 @@
 -- ---------------------------------------------------------------------
 CREATE TABLE paises (
     id               INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nombre           VARCHAR(100) NOT NULL,
     iso_alpha_2      CHAR(2)      NOT NULL UNIQUE,
     iso_alpha_3      CHAR(3)      NOT NULL UNIQUE,
     codigo_numerico  INT          NOT NULL UNIQUE,
