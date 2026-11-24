@@ -1,0 +1,146 @@
+<div class="app-shell">
+  @if (mobileMenuOpen()) {
+    <div class="sidebar-backdrop" (click)="closeMobileMenu()" aria-hidden="true"></div>
+  }
+
+  <aside class="sidebar" [class.open]="mobileMenuOpen()">
+    <div class="sidebar-header">
+      <a class="brand" routerLink="/dashboard" (click)="closeMobileMenu()">
+        <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <rect x="4" y="4" width="32" height="32" rx="6" stroke="currentColor" stroke-width="2.2" />
+          <rect x="12" y="12" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.2" />
+          <path d="M4 4L12 12M36 4L28 12M4 36L12 28M36 36L28 28" stroke="currentColor" stroke-width="1.8" />
+        </svg>
+        <div>
+          <span class="brand-name">Tesserak</span>
+          <span class="brand-sub">Suite Empresarial</span>
+        </div>
+      </a>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Navegación principal">
+      @for (section of navSections; track section.title) {
+        <div class="nav-group">
+          <span class="nav-title">{{ section.title }}</span>
+          @for (item of section.items; track item.label) {
+            @if (item.children?.length) {
+              <div class="nav-parent">
+                <button
+                  type="button"
+                  class="nav-item nav-toggle"
+                  [class.active]="isGroupActive(item)"
+                  [class.expanded]="isSubmenuOpen(item.label)"
+                  [attr.aria-expanded]="isSubmenuOpen(item.label)"
+                  (click)="toggleSubmenu(item.label)"
+                >
+                  <span class="nav-dot"></span>
+                  <span class="nav-label">{{ item.label }}</span>
+                  <svg
+                    class="nav-chevron"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                </button>
+
+                @if (isSubmenuOpen(item.label)) {
+                  <div class="nav-submenu" role="group" [attr.aria-label]="item.label">
+                    @for (child of item.children; track child.route) {
+                      <a
+                        class="nav-subitem"
+                        [routerLink]="child.route"
+                        routerLinkActive="active"
+                        (click)="closeMobileMenu()"
+                      >
+                        <span class="subitem-line" aria-hidden="true"></span>
+                        <span>{{ child.label }}</span>
+                      </a>
+                    }
+                  </div>
+                }
+              </div>
+            } @else if (item.disabled || !item.route) {
+              <div class="nav-item disabled" aria-disabled="true">
+                <span class="nav-dot"></span>
+                <span class="nav-label">{{ item.label }}</span>
+                @if (item.badge) {
+                  <span class="nav-badge muted">{{ item.badge }}</span>
+                }
+              </div>
+            } @else {
+              <a
+                class="nav-item"
+                [routerLink]="item.route"
+                routerLinkActive="active"
+                (click)="closeMobileMenu()"
+              >
+                <span class="nav-dot"></span>
+                <span class="nav-label">{{ item.label }}</span>
+                @if (item.badge) {
+                  <span class="nav-badge">{{ item.badge }}</span>
+                }
+              </a>
+            }
+          }
+        </div>
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      @if (usuario(); as u) {
+        <div class="user-card">
+          <div class="avatar">{{ iniciales() }}</div>
+          <div class="user-info">
+            <span class="user-name">{{ u.nombres }} {{ u.apellidos }}</span>
+            <span class="user-handle">&#64;{{ u.nombre_usuario }}</span>
+          </div>
+        </div>
+      }
+      <button type="button" class="btn-logout" (click)="logout()">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button
+          type="button"
+          class="menu-toggle"
+          (click)="toggleMobileMenu()"
+          aria-label="Abrir menú de navegación"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div class="search-box">
+          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path
+              fill-rule="evenodd"
+              d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <input type="search" placeholder="Buscar leads, empresas o usuarios..." aria-label="Buscar" />
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        @if (usuario(); as u) {
+          <span class="context-pill">Empresa #{{ u.empresa_id }} · Sucursal #{{ u.sucursal_id }}</span>
+        }
+      </div>
+    </header>
+
+    <main class="page-content">
+      <router-outlet />
+    </main>
+  </div>
+</div>

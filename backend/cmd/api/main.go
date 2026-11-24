@@ -63,7 +63,9 @@ func main() {
 	auth.NewHandler(auth.NewService(db, cfg.JWTSecret)).RegisterRoutes(api)
 	empresas.NewHandler(empresas.NewService(empresas.NewRepository(db))).RegisterRoutes(api)
 	usuarios.NewHandler(usuarios.NewService(usuarios.NewRepository(db))).RegisterRoutes(api)
-	crm.NewHandler(crm.NewService(crm.NewRepository(db))).RegisterRoutes(api)
+	crm.NewHandler(crm.NewService(crm.NewRepository(db))).
+		WithAuthMiddleware(auth.RequireAuth(cfg.JWTSecret)).
+		RegisterRoutes(api)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

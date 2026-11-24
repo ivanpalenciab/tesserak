@@ -38,17 +38,17 @@ describe('LoginComponent', () => {
     component.onSubmit();
 
     expect(component.form.invalid).toBe(true);
-    expect(component.form.controls.email.touched).toBe(true);
+    expect(component.form.controls.identificador.touched).toBe(true);
     expect(component.form.controls.password.touched).toBe(true);
   });
 
-  it('debe autenticar y navegar al dashboard cuando las credenciales son válidas', () => {
+  it('debe autenticar usando nombre de usuario y navegar al dashboard', () => {
     const fixture = TestBed.createComponent(LoginComponent);
     const component = fixture.componentInstance;
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     component.form.setValue({
-      email: 'juan@tesserak.com',
+      identificador: 'jperez',
       password: 'Secreta123',
       identificador_fiscal: '',
       recordar: true,
@@ -59,7 +59,7 @@ describe('LoginComponent', () => {
     const req = httpMock.expectOne(`${environment.apiUrl}/auth/login`);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
-      email: 'juan@tesserak.com',
+      identificador: 'jperez',
       password: 'Secreta123',
     });
 
@@ -82,12 +82,51 @@ describe('LoginComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith(['/dashboard']);
   });
 
+  it('debe autenticar también usando correo electrónico', () => {
+    const fixture = TestBed.createComponent(LoginComponent);
+    const component = fixture.componentInstance;
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.form.setValue({
+      identificador: 'juan@tesserak.com',
+      password: 'Secreta123',
+      identificador_fiscal: '',
+      recordar: false,
+    });
+
+    component.onSubmit();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/auth/login`);
+    expect(req.request.body).toEqual({
+      identificador: 'juan@tesserak.com',
+      password: 'Secreta123',
+    });
+
+    req.flush({
+      access_token: 'jwt-email-token',
+      token_type: 'Bearer',
+      expires_in: 43200,
+      usuario: {
+        id: 1,
+        empresa_id: 1,
+        sucursal_id: 1,
+        nombre_usuario: 'jperez',
+        nombres: 'Juan',
+        apellidos: 'Pérez',
+        email: 'juan@tesserak.com',
+      },
+    });
+
+    expect(sessionStorage.getItem('tesserak_token')).toBe('jwt-email-token');
+    expect(navigateSpy).toHaveBeenCalledWith(['/dashboard']);
+  });
+
   it('debe mostrar el campo de identificador fiscal si el backend responde empresa_requerida (409)', () => {
     const fixture = TestBed.createComponent(LoginComponent);
     const component = fixture.componentInstance;
 
     component.form.setValue({
-      email: 'compartido@tesserak.com',
+      identificador: 'compartido@tesserak.com',
       password: 'Secreta123',
       identificador_fiscal: '',
       recordar: false,

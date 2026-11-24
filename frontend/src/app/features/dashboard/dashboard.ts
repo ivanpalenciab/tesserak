@@ -1,92 +1,93 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { DashboardService, HomeDashboardData } from './dashboard.service';
+
+interface ModuloCard {
+  titulo: string;
+  descripcion: string;
+  route?: string;
+  estado: 'Disponible' | 'Próximamente';
+}
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  template: `
-    <div class="shell">
-      <header class="topbar">
-        <div class="brand">Tesserak</div>
-        <div class="user-bar">
-          @if (usuario(); as u) {
-            <span class="user-name">{{ u.nombres }} {{ u.apellidos }}</span>
-            <span class="user-meta">Empresa #{{ u.empresa_id }} · Sucursal #{{ u.sucursal_id }}</span>
-          }
-          <button type="button" class="btn-logout" (click)="logout()">Cerrar sesión</button>
-        </div>
-      </header>
-
-      <main class="content">
-        <h1>Bienvenido a Tesserak</h1>
-        <p>Sesión iniciada correctamente. Aquí conectaremos los módulos de Empresas, Usuarios y CRM.</p>
-      </main>
-    </div>
-  `,
-  styles: `
-    .shell {
-      min-height: 100vh;
-      background: var(--bg-page);
-    }
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 2rem;
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border-color);
-    }
-    .brand {
-      font-weight: 700;
-      font-size: 1.15rem;
-      color: var(--text-primary);
-    }
-    .user-bar {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .user-name {
-      font-weight: 600;
-      font-size: 0.92rem;
-    }
-    .user-meta {
-      font-size: 0.82rem;
-      color: var(--text-secondary);
-    }
-    .btn-logout {
-      padding: 0.45rem 0.9rem;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      background: #ffffff;
-      color: var(--text-primary);
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .btn-logout:hover {
-      background: #f1f5f9;
-    }
-    .content {
-      max-width: 960px;
-      margin: 3rem auto;
-      padding: 0 1.5rem;
-    }
-    .content h1 {
-      margin: 0 0 0.5rem;
-      font-size: 1.65rem;
-    }
-    .content p {
-      color: var(--text-secondary);
-    }
-  `,
+  imports: [RouterLink, CurrencyPipe, DecimalPipe, DatePipe],
+  templateUrl: './dashboard.html',
+  styleUrl: './dashboard.scss',
 })
-export class DashboardComponent {
+export class DashboardComponent implements OnInit {
   private readonly auth = inject(AuthService);
-  readonly usuario = this.auth.usuario;
+  private readonly dashboardSvc = inject(DashboardService);
 
-  logout(): void {
-    this.auth.logout();
+  readonly usuario = this.auth.usuario;
+  readonly loading = signal(true);
+  readonly data = signal<HomeDashboardData | null>(null);
+  readonly hoy = new Date();
+
+  readonly maxLeadsEtapa = computed(() => {
+    const etapas = this.data()?.crm?.por_etapa ?? [];
+    return Math.max(1, ...etapas.map((e) => e.cantidad));
+  });
+
+  readonly modulos: ModuloCard[] = [
+    {
+      titulo: 'CRM y Embudo',
+      descripcion: 'Leads, etapas del pipeline, actividades de seguimiento y conversión.',
+      route: '/crm',
+      estado: 'Disponible',
+    },
+    {
+      titulo: 'Empresas',
+      descripcion: 'Administración multi-empresa, datos fiscales y configuración general.',
+      route: '/empresas',
+      estado: 'Disponible',
+    },
+    {
+      titulo: 'Usuarios',
+      descripcion: 'Gestión de accesos por sucursal, credenciales y estados.',
+      route: '/usuarios',
+      estado: 'Disponible',
+    },
+    {
+      titulo: 'Terceros',
+      descripcion: 'Clientes, proveedores y empleados bajo catálogo unificado.',
+      estado: 'Próximamente',
+    },
+    {
+      titulo: 'Productos e Inventario',
+      descripcion: 'Catálogo maestro, bodegas, kardex y control de existencias.',
+      estado: 'Próximamente',
+    },
+    {
+      titulo: 'Ventas y Lealtad',
+      descripcion: 'Facturación comercial, compras y programa de puntos.',
+      estado: 'Próximamente',
+    },
+  ];
+
+  ngOnInit(): void {
+    this.recargar();
+  }
+
+  recargar(): void {
+    const empresaId = this.usuario()?.empresa_id ?? 1;
+    this.loading.set(true);
+    this.dashboardSvc.cargarResumen(empresaId).subscribe((res) => {
+      this.data.set(res);
+      this.loading.set(false);
+    });
+  }
+
+  porcentajeEtapa(cantidad: number): number {
+    return Math.round((cantidad / this.maxLeadsEtapa()) * 100);
+  }
+
+  estaVencida(fecha: string | null): boolean {
+    if (!fecha) return false;
+    return new Date(fecha).getTime() < Date.now();
   }
 }

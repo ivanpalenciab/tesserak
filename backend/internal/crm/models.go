@@ -75,6 +75,7 @@ type Lead struct {
 	Cargo                          *string        `gorm:"column:cargo"`
 	Email                          *string        `gorm:"column:email"`
 	Telefono                       *string        `gorm:"column:telefono"`
+	UsuarioFacebook                *string        `gorm:"column:usuario_facebook"`
 	Temperatura                    string         `gorm:"column:temperatura;not null"`
 	Score                          int32          `gorm:"column:score;not null"`
 	ValorEstimado                  float64        `gorm:"column:valor_estimado;not null"`

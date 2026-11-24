@@ -1,0 +1,850 @@
+<section class="campanas-page">
+  <header class="page-header">
+    <div>
+      <h1>Campañas de marketing</h1>
+      <p class="subtitle">
+        Administra campañas, controla presupuestos y gastos, y haz seguimiento a los leads atribuidos.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      @if (vistaPrincipal() === 'campanas') {
+        <button type="button" class="btn-secondary" (click)="cargarCampanas()" [disabled]="loading()">
+          @if (loading()) {
+            Actualizando...
+          } @else {
+            Actualizar
+          }
+        </button>
+        <button type="button" class="btn-primary" (click)="abrirNuevaCampana()">
+          + Nueva campaña
+        </button>
+      } @else {
+        <button type="button" class="btn-primary" (click)="abrirNuevoTipo()">
+          + Nuevo tipo
+        </button>
+      }
+    </div>
+  </header>
+
+  <!-- Pestañas principales -->
+  <nav class="tabs-bar" aria-label="Secciones de campañas">
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="vistaPrincipal() === 'campanas'"
+      (click)="vistaPrincipal.set('campanas')"
+    >
+      Campañas ({{ total() }})
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="vistaPrincipal() === 'tipos'"
+      (click)="vistaPrincipal.set('tipos')"
+    >
+      Tipos de campaña ({{ tipos().length }})
+    </button>
+  </nav>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- ==================== VISTA CAMPAÑAS ==================== -->
+  @if (vistaPrincipal() === 'campanas') {
+    <section class="filters-panel" aria-label="Filtros de campañas">
+      <div class="filter-search">
+        <input
+          type="search"
+          [value]="filtroTexto()"
+          (input)="onBuscarTexto($any($event.target).value)"
+          placeholder="Buscar por nombre, descripción u objetivo..."
+          aria-label="Buscar campañas"
+        />
+      </div>
+
+      <select
+        [value]="filtroEstado()"
+        (change)="onFiltroEstado($any($event.target).value)"
+        aria-label="Filtrar por estado"
+      >
+        <option value="">Todos los estados</option>
+        @for (est of estadosCampana; track est.value) {
+          <option [value]="est.value">{{ est.label }}</option>
+        }
+      </select>
+
+      <select
+        [value]="filtroTipoId() ?? ''"
+        (change)="onFiltroTipo($any($event.target).value)"
+        aria-label="Filtrar por tipo de campaña"
+      >
+        <option value="">Todos los tipos</option>
+        @for (tipo of tipos(); track tipo.id) {
+          <option [value]="tipo.id">{{ tipo.nombre }}</option>
+        }
+      </select>
+
+      <select
+        [value]="filtroOrigenId() ?? ''"
+        (change)="onFiltroOrigen($any($event.target).value)"
+        aria-label="Filtrar por origen"
+      >
+        <option value="">Todos los orígenes</option>
+        @for (origen of origenes(); track origen.id) {
+          <option [value]="origen.id">{{ origen.nombre }}</option>
+        }
+      </select>
+
+      <input
+        type="date"
+        [value]="filtroFechaDesde()"
+        (change)="onFiltroFechaDesde($any($event.target).value)"
+        aria-label="Fecha inicio desde"
+        title="Fecha inicio desde"
+      />
+
+      <input
+        type="date"
+        [value]="filtroFechaHasta()"
+        (change)="onFiltroFechaHasta($any($event.target).value)"
+        aria-label="Fecha inicio hasta"
+        title="Fecha inicio hasta"
+      />
+
+      @if (hayFiltrosActivos()) {
+        <button type="button" class="btn-link" (click)="limpiarFiltros()">Limpiar</button>
+      }
+    </section>
+
+    <section class="table-panel">
+      <div class="table-meta">
+        <span>
+          Mostrando <strong>{{ campanas().length }}</strong> de <strong>{{ total() }}</strong> campañas
+        </span>
+      </div>
+
+      @if (loading()) {
+        <div class="empty-box">Cargando campañas...</div>
+      } @else if (campanas().length === 0) {
+        <div class="empty-box">
+          @if (hayFiltrosActivos()) {
+            <p>No se encontraron campañas con los filtros aplicados.</p>
+            <button type="button" class="btn-secondary" (click)="limpiarFiltros()">
+              Ver todas las campañas
+            </button>
+          } @else {
+            <p>Aún no hay campañas registradas para esta empresa.</p>
+            <button type="button" class="btn-primary" (click)="abrirNuevaCampana()">
+              Crear primera campaña
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Campaña</th>
+                <th>Tipo / Origen</th>
+                <th>Vigencia</th>
+                <th class="num">Presupuesto</th>
+                <th>Estado</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of campanas(); track c.id) {
+                <tr>
+                  <td>
+                    <div class="cell-title">{{ c.nombre }}</div>
+                    @if (c.objetivo || c.descripcion) {
+                      <div class="cell-sub">{{ c.objetivo || c.descripcion }}</div>
+                    }
+                  </td>
+
+                  <td>
+                    <span class="tag">{{ nombreTipo(c.tipo_campana_id) }}</span>
+                    <div class="cell-sub">{{ nombreOrigen(c.origen_id) }}</div>
+                  </td>
+
+                  <td class="nowrap">
+                    <div>{{ c.fecha_inicio }}</div>
+                    <div class="cell-sub">
+                      @if (c.fecha_fin) {
+                        hasta {{ c.fecha_fin }}
+                      } @else {
+                        Sin fecha fin
+                      }
+                    </div>
+                  </td>
+
+                  <td class="num">
+                    @if (c.presupuesto !== null) {
+                      <strong>{{ c.presupuesto | number: '1.2-2' }}</strong>
+                      @if (c.moneda_id) {
+                        <div class="cell-sub">Moneda #{{ c.moneda_id }}</div>
+                      }
+                    } @else {
+                      <span class="muted">—</span>
+                    }
+                  </td>
+
+                  <td>
+                    <span class="estado-badge" [attr.data-estado]="c.estado">
+                      {{ etiquetaEstado(c.estado) }}
+                    </span>
+                  </td>
+
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon primary" (click)="abrirDetalle(c)">
+                        Detalle
+                      </button>
+
+                      @if (c.estado !== 'FINALIZADA') {
+                        <button type="button" class="btn-icon" (click)="abrirEditarCampana(c)">
+                          Editar
+                        </button>
+                      }
+
+                      @if (c.estado === 'BORRADOR' || c.estado === 'PROGRAMADA' || c.estado === 'PAUSADA') {
+                        <button
+                          type="button"
+                          class="btn-icon success"
+                          (click)="cambiarEstado(c, 'ACTIVA')"
+                        >
+                          Activar
+                        </button>
+                      }
+
+                      @if (c.estado === 'ACTIVA') {
+                        <button
+                          type="button"
+                          class="btn-icon warning"
+                          (click)="cambiarEstado(c, 'PAUSADA')"
+                        >
+                          Pausar
+                        </button>
+                      }
+
+                      @if (c.estado !== 'FINALIZADA') {
+                        <button
+                          type="button"
+                          class="btn-icon danger"
+                          (click)="cambiarEstado(c, 'FINALIZADA')"
+                        >
+                          Finalizar
+                        </button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (totalPaginas() > 1) {
+          <footer class="pagination">
+            <button
+              type="button"
+              class="btn-secondary"
+              [disabled]="page() <= 1"
+              (click)="irAPagina(page() - 1)"
+            >
+              ← Anterior
+            </button>
+            <span class="page-info">Página {{ page() }} de {{ totalPaginas() }}</span>
+            <button
+              type="button"
+              class="btn-secondary"
+              [disabled]="page() >= totalPaginas()"
+              (click)="irAPagina(page() + 1)"
+            >
+              Siguiente →
+            </button>
+          </footer>
+        }
+      }
+    </section>
+  }
+
+  <!-- ==================== VISTA TIPOS DE CAMPAÑA ==================== -->
+  @if (vistaPrincipal() === 'tipos') {
+    <section class="table-panel">
+      <div class="table-meta">
+        <span>Catálogo de tipos de campaña de tu empresa</span>
+      </div>
+
+      @if (tipos().length === 0) {
+        <div class="empty-box">
+          <p>No hay tipos de campaña registrados.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevoTipo()">
+            Crear primer tipo
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Estado</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of tipos(); track t.id) {
+                <tr>
+                  <td><div class="cell-title">{{ t.nombre }}</div></td>
+                  <td>{{ t.descripcion || '—' }}</td>
+                  <td>
+                    <span class="estado-badge" [attr.data-estado]="t.activo ? 'ACTIVA' : 'PAUSADA'">
+                      {{ t.activo ? 'Activo' : 'Inactivo' }}
+                    </span>
+                  </td>
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon" (click)="abrirEditarTipo(t)">
+                        Editar
+                      </button>
+                      <button type="button" class="btn-icon" (click)="toggleActivoTipo(t)">
+                        {{ t.activo ? 'Desactivar' : 'Activar' }}
+                      </button>
+                      <button type="button" class="btn-icon danger" (click)="eliminarTipo(t)">
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</section>
+
+<!-- ==================== MODAL CREAR / EDITAR CAMPAÑA ==================== -->
+@if (modalCampanaAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalCampana()">
+    <div
+      class="modal-card"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="campanaEditando() ? 'Editar campaña' : 'Nueva campaña'"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>{{ campanaEditando() ? 'Editar campaña' : 'Nueva campaña' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalCampana()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+
+      <form [formGroup]="campanaForm" (ngSubmit)="guardarCampana()" class="modal-form">
+        @if (tiposActivos().length === 0) {
+          <div class="alert warning">
+            Debes tener al menos un tipo de campaña activo para crear campañas.
+          </div>
+        }
+
+        <div class="form-grid">
+          <label class="field full">
+            <span>Nombre de la campaña *</span>
+            <input type="text" formControlName="nombre" placeholder="Ej. Black Friday 2026" />
+          </label>
+
+          <label class="field">
+            <span>Tipo de campaña *</span>
+            <select formControlName="tipo_campana_id">
+              <option [ngValue]="null" disabled>Selecciona un tipo</option>
+              @for (tipo of tiposActivos(); track tipo.id) {
+                <option [ngValue]="tipo.id">{{ tipo.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Origen (opcional)</span>
+            <select formControlName="origen_id">
+              <option [ngValue]="null">Sin origen específico</option>
+              @for (origen of origenes(); track origen.id) {
+                <option [ngValue]="origen.id">{{ origen.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Fecha inicio *</span>
+            <input type="date" formControlName="fecha_inicio" />
+          </label>
+
+          <label class="field">
+            <span>Fecha fin (opcional)</span>
+            <input type="date" formControlName="fecha_fin" />
+          </label>
+
+          <label class="field">
+            <span>Presupuesto (opcional)</span>
+            <input type="number" min="0" step="0.01" formControlName="presupuesto" placeholder="0.00" />
+          </label>
+
+          <label class="field">
+            <span>ID Moneda (requerido si hay presupuesto)</span>
+            <input type="number" min="1" formControlName="moneda_id" placeholder="Ej. 1" />
+          </label>
+
+          @if (!campanaEditando()) {
+            <label class="field full">
+              <span>Estado inicial</span>
+              <select formControlName="estado">
+                @for (est of estadosCampana; track est.value) {
+                  <option [value]="est.value">{{ est.label }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          <label class="field full">
+            <span>Objetivo</span>
+            <textarea rows="2" formControlName="objetivo" placeholder="Ej. Captar 150 leads calificados"></textarea>
+          </label>
+
+          <label class="field full">
+            <span>Descripción</span>
+            <textarea rows="2" formControlName="descripcion" placeholder="Detalles de la iniciativa..."></textarea>
+          </label>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalCampana()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || campanaForm.invalid">
+            @if (saving()) {
+              Guardando...
+            } @else if (campanaEditando()) {
+              Guardar cambios
+            } @else {
+              Crear campaña
+            }
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- ==================== MODAL DETALLE DE CAMPAÑA ==================== -->
+@if (campanaDetalle(); as camp) {
+  <div class="modal-backdrop" (click)="cerrarDetalle()">
+    <div
+      class="modal-card modal-wide"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="'Detalle de campaña ' + camp.nombre"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <div>
+          <div class="detail-title-row">
+            <h2>{{ camp.nombre }}</h2>
+            <span class="estado-badge" [attr.data-estado]="camp.estado">
+              {{ etiquetaEstado(camp.estado) }}
+            </span>
+          </div>
+          <p class="detail-sub">
+            {{ nombreTipo(camp.tipo_campana_id) }} · {{ nombreOrigen(camp.origen_id) }} ·
+            {{ camp.fecha_inicio }}@if (camp.fecha_fin) { → {{ camp.fecha_fin }} }
+          </p>
+        </div>
+        <button type="button" class="btn-close" (click)="cerrarDetalle()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+
+      <div class="detail-tabs">
+        <button
+          type="button"
+          class="tab-btn"
+          [class.active]="tabDetalle() === 'indicadores'"
+          (click)="tabDetalle.set('indicadores')"
+        >
+          Indicadores
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
+          [class.active]="tabDetalle() === 'leads'"
+          (click)="tabDetalle.set('leads')"
+        >
+          Leads asociados ({{ leadsCampana().length }})
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
+          [class.active]="tabDetalle() === 'gastos'"
+          (click)="tabDetalle.set('gastos')"
+        >
+          Gastos ({{ gastosCampana().length }})
+        </button>
+      </div>
+
+      <div class="detail-body">
+        @if (loadingDetalle()) {
+          <div class="empty-box">Cargando información de la campaña...</div>
+        } @else {
+          <!-- TAB INDICADORES -->
+          @if (tabDetalle() === 'indicadores') {
+            <div class="kpi-grid">
+              <article class="kpi-card">
+                <span class="kpi-label">Presupuesto</span>
+                <strong class="kpi-value">
+                  @if (indicadores()?.presupuesto !== null && indicadores()?.presupuesto !== undefined) {
+                    {{ indicadores()!.presupuesto! | number: '1.2-2' }}
+                  } @else {
+                    —
+                  }
+                </strong>
+                <span class="kpi-meta">
+                  @if (camp.moneda_id) { Moneda #{{ camp.moneda_id }} } @else { Sin moneda }
+                </span>
+              </article>
+
+              <article class="kpi-card">
+                <span class="kpi-label">Gasto acumulado</span>
+                <strong class="kpi-value">
+                  @if (indicadores()?.gasto_acumulado !== null && indicadores()?.gasto_acumulado !== undefined) {
+                    {{ indicadores()!.gasto_acumulado! | number: '1.2-2' }}
+                  } @else {
+                    —
+                  }
+                </strong>
+                <span class="kpi-meta">En moneda de campaña</span>
+              </article>
+
+              <article class="kpi-card">
+                <span class="kpi-label">Presupuesto disponible</span>
+                <strong class="kpi-value">
+                  @if (indicadores()?.presupuesto_disponible !== null && indicadores()?.presupuesto_disponible !== undefined) {
+                    {{ indicadores()!.presupuesto_disponible! | number: '1.2-2' }}
+                  } @else {
+                    —
+                  }
+                </strong>
+                <span class="kpi-meta">Presupuesto menos gasto</span>
+              </article>
+
+              <article class="kpi-card">
+                <span class="kpi-label">Leads asociados</span>
+                <strong class="kpi-value">{{ indicadores()?.total_leads ?? 0 }}</strong>
+                <span class="kpi-meta">Atribuidos a esta campaña</span>
+              </article>
+            </div>
+
+            @if (indicadores()?.gastos_por_moneda?.length) {
+              <div class="subpanel">
+                <h3>Gastos acumulados por moneda</h3>
+                <div class="currency-chips">
+                  @for (gm of indicadores()!.gastos_por_moneda; track gm.moneda_id) {
+                    <span class="currency-chip">
+                      Moneda #{{ gm.moneda_id }}:
+                      <strong>{{ gm.total_gastado | number: '1.2-2' }}</strong>
+                      ({{ gm.cantidad_gastos }} registros)
+                    </span>
+                  }
+                </div>
+              </div>
+            }
+
+            <div class="subpanel">
+              <h3>Resumen</h3>
+              <p><strong>Objetivo:</strong> {{ camp.objetivo || 'No definido' }}</p>
+              <p><strong>Descripción:</strong> {{ camp.descripcion || 'Sin descripción' }}</p>
+            </div>
+          }
+
+          <!-- TAB LEADS ASOCIADOS -->
+          @if (tabDetalle() === 'leads') {
+            @if (puedeAsociarLeads(camp)) {
+              <form [formGroup]="asociarLeadForm" (ngSubmit)="asociarLead()" class="inline-form">
+                <h3>Asociar lead a esta campaña</h3>
+                <div class="form-grid">
+                  <label class="field">
+                    <span>Lead *</span>
+                    <select formControlName="lead_id">
+                      <option [ngValue]="null" disabled>Selecciona un lead</option>
+                      @for (l of leadsEmpresa(); track l.id) {
+                        <option [ngValue]="l.id">
+                          {{ l.nombre }} {{ l.apellido }}@if (l.nombre_empresa) { · {{ l.nombre_empresa }} }
+                        </option>
+                      }
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Tipo de atribución</span>
+                    <select formControlName="tipo_atribucion">
+                      @for (t of tiposAtribucion; track t.value) {
+                        <option [value]="t.value">{{ t.label }}</option>
+                      }
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>UTM Source</span>
+                    <input type="text" formControlName="utm_source" placeholder="facebook, google..." />
+                  </label>
+
+                  <label class="field">
+                    <span>UTM Medium</span>
+                    <input type="text" formControlName="utm_medium" placeholder="cpc, email..." />
+                  </label>
+
+                  <label class="field">
+                    <span>UTM Campaign</span>
+                    <input type="text" formControlName="utm_campaign" placeholder="bf_2026..." />
+                  </label>
+
+                  <label class="field">
+                    <span>ID campaña externa</span>
+                    <input type="text" formControlName="external_campaign_id" placeholder="Opcional" />
+                  </label>
+                </div>
+
+                <div class="inline-form-actions">
+                  <button
+                    type="submit"
+                    class="btn-primary"
+                    [disabled]="saving() || asociarLeadForm.invalid"
+                  >
+                    + Asociar lead
+                  </button>
+                </div>
+              </form>
+            } @else {
+              <div class="alert warning">
+                Esta campaña está en estado <strong>{{ etiquetaEstado(camp.estado) }}</strong> y no admite nuevas asociaciones de leads.
+              </div>
+            }
+
+            @if (leadsCampana().length === 0) {
+              <div class="empty-box">Aún no hay leads asociados a esta campaña.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Lead</th>
+                      <th>Atribución</th>
+                      <th>UTMs</th>
+                      <th>Fecha</th>
+                      <th class="actions-col">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (item of leadsCampana(); track item.id) {
+                      <tr>
+                        <td>
+                          <div class="cell-title">{{ item.lead_nombre }} {{ item.lead_apellido }}</div>
+                          @if (item.lead_email || item.lead_telefono) {
+                            <div class="cell-sub">{{ item.lead_email || item.lead_telefono }}</div>
+                          }
+                        </td>
+                        <td>
+                          <span class="tag">{{ item.tipo_atribucion || 'Sin definir' }}</span>
+                        </td>
+                        <td>
+                          @if (item.utm_source || item.utm_medium || item.utm_campaign) {
+                            <div class="cell-sub">
+                              {{ item.utm_source || '—' }} / {{ item.utm_medium || '—' }} / {{ item.utm_campaign || '—' }}
+                            </div>
+                          } @else {
+                            <span class="muted">—</span>
+                          }
+                        </td>
+                        <td class="nowrap">{{ item.fecha_asociacion | date: 'dd/MM/yyyy HH:mm' }}</td>
+                        <td class="actions-col">
+                          @if (camp.estado !== 'FINALIZADA') {
+                            <button
+                              type="button"
+                              class="btn-icon danger"
+                              (click)="desasociarLead(item.lead_id)"
+                            >
+                              Quitar
+                            </button>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+
+          <!-- TAB GASTOS -->
+          @if (tabDetalle() === 'gastos') {
+            @if (camp.estado !== 'FINALIZADA') {
+              <form [formGroup]="gastoForm" (ngSubmit)="guardarGasto()" class="inline-form">
+                <h3>{{ gastoEditando() ? 'Editar gasto' : 'Registrar gasto' }}</h3>
+                <div class="form-grid">
+                  <label class="field">
+                    <span>Fecha *</span>
+                    <input type="date" formControlName="fecha" />
+                  </label>
+
+                  <label class="field">
+                    <span>Concepto *</span>
+                    <input type="text" formControlName="concepto" placeholder="Ej. Pauta Meta Ads" />
+                  </label>
+
+                  <label class="field">
+                    <span>Categoría</span>
+                    <input type="text" formControlName="categoria_gasto" placeholder="Ej. PAUTA_DIGITAL" />
+                  </label>
+
+                  <label class="field">
+                    <span>Valor *</span>
+                    <input type="number" min="0" step="0.01" formControlName="valor" />
+                  </label>
+
+                  <label class="field">
+                    <span>ID Moneda *</span>
+                    <input type="number" min="1" formControlName="moneda_id" />
+                  </label>
+
+                  <label class="field">
+                    <span>ID Proveedor (opcional)</span>
+                    <input type="number" min="1" formControlName="proveedor_tercero_empresa_rol_id" />
+                  </label>
+                </div>
+
+                <div class="inline-form-actions">
+                  @if (gastoEditando()) {
+                    <button type="button" class="btn-secondary" (click)="cancelarEdicionGasto()">
+                      Cancelar
+                    </button>
+                  }
+                  <button
+                    type="submit"
+                    class="btn-primary"
+                    [disabled]="saving() || gastoForm.invalid"
+                  >
+                    {{ gastoEditando() ? 'Guardar gasto' : '+ Registrar gasto' }}
+                  </button>
+                </div>
+              </form>
+            } @else {
+              <div class="alert warning">
+                La campaña está finalizada; los gastos son de solo lectura.
+              </div>
+            }
+
+            @if (gastosCampana().length === 0) {
+              <div class="empty-box">No hay gastos registrados en esta campaña.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Concepto</th>
+                      <th>Categoría</th>
+                      <th class="num">Valor</th>
+                      <th class="actions-col">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (g of gastosCampana(); track g.id) {
+                      <tr>
+                        <td class="nowrap">{{ g.fecha }}</td>
+                        <td><div class="cell-title">{{ g.concepto }}</div></td>
+                        <td>{{ g.categoria_gasto || '—' }}</td>
+                        <td class="num">
+                          <strong>{{ g.valor | number: '1.2-2' }}</strong>
+                          <div class="cell-sub">Moneda #{{ g.moneda_id }}</div>
+                        </td>
+                        <td class="actions-col">
+                          @if (camp.estado !== 'FINALIZADA') {
+                            <div class="row-actions">
+                              <button type="button" class="btn-icon" (click)="editarGasto(g)">
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                class="btn-icon danger"
+                                (click)="eliminarGasto(g.id)"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ==================== MODAL CREAR / EDITAR TIPO DE CAMPAÑA ==================== -->
+@if (modalTipoAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalTipo()">
+    <div
+      class="modal-card confirm-card"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="tipoEditando() ? 'Editar tipo de campaña' : 'Nuevo tipo de campaña'"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>{{ tipoEditando() ? 'Editar tipo de campaña' : 'Nuevo tipo de campaña' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalTipo()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+
+      <form [formGroup]="tipoForm" (ngSubmit)="guardarTipo()" class="modal-form">
+        <label class="field">
+          <span>Nombre *</span>
+          <input type="text" formControlName="nombre" placeholder="Ej. Publicidad digital" />
+        </label>
+
+        <label class="field">
+          <span>Descripción</span>
+          <textarea rows="2" formControlName="descripcion" placeholder="Descripción opcional"></textarea>
+        </label>
+
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Activo</span>
+        </label>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalTipo()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || tipoForm.invalid">
+            {{ tipoEditando() ? 'Guardar cambios' : 'Crear tipo' }}
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}

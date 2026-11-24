@@ -34,6 +34,9 @@ func TestValidacionesCRM(t *testing.T) {
 		{"origenes sin empresa_id", http.MethodGet, "/api/v1/crm/origenes", ``, 400, `"field":"empresa_id"`},
 		{"estado orden negativo", http.MethodPost, "/api/v1/crm/estados", `{"empresa_id":1,"nombre":"Nuevo","orden":-1}`, 400, `"field":"orden"`},
 		{"motivo sin descripcion", http.MethodPost, "/api/v1/crm/motivos-descarte", `{"empresa_id":1}`, 400, `"field":"descripcion"`},
+		{"etapa oportunidad sin nombre", http.MethodPost, "/api/v1/crm/etapas-oportunidad", `{"empresa_id":1}`, 400, `"field":"nombre"`},
+		{"etapa oportunidad probabilidad > 100", http.MethodPost, "/api/v1/crm/etapas-oportunidad", `{"empresa_id":1,"nombre":"Propuesta","probabilidad_pct":150}`, 400, `"field":"probabilidad_pct"`},
+		{"etapa oportunidad ganada y perdida", http.MethodPost, "/api/v1/crm/etapas-oportunidad", `{"empresa_id":1,"nombre":"Cierre","es_ganada":true,"es_perdida":true}`, 400, `"etapa_cierre_invalida"`},
 
 		// Leads
 		{"lead sin campos", http.MethodPost, "/api/v1/crm/leads", `{}`, 400, `"validacion"`},

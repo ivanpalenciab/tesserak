@@ -16,13 +16,17 @@ import (
 const tokenTTL = 12 * time.Hour
 
 var (
-	ErrCredencialesInvalidas = httpx.NewError(http.StatusUnauthorized, "credenciales_invalidas", "correo o contraseña incorrectos")
+	ErrCredencialesInvalidas = httpx.NewError(http.StatusUnauthorized, "credenciales_invalidas", "usuario/correo o contraseña incorrectos")
 	ErrUsuarioInactivo       = httpx.NewError(http.StatusForbidden, "usuario_inactivo", "el usuario se encuentra inactivo")
-	ErrEmpresaRequerida      = httpx.NewError(http.StatusConflict, "empresa_requerida", "el correo existe en varias empresas; indique el identificador fiscal de su empresa")
+	ErrEmpresaRequerida      = httpx.NewError(http.StatusConflict, "empresa_requerida", "el usuario o correo existe en varias empresas; indique el identificador fiscal de su empresa")
+	ErrIdentificadorVacio    = httpx.NewError(http.StatusBadRequest, "validacion", "debe indicar un correo electrónico o nombre de usuario")
 )
 
 type LoginRequest struct {
-	Email               string  `json:"email"                binding:"required,email,max=255"`
+	// Identificador acepta correo electrónico o nombre de usuario.
+	// Se mantiene Email por retrocompatibilidad si un cliente aún envía "email".
+	Identificador       string  `json:"identificador"        binding:"omitempty,max=255"`
+	Email               string  `json:"email"                binding:"omitempty,max=255"`
 	Password            string  `json:"password"             binding:"required,min=1,max=72"`
 	IdentificadorFiscal *string `json:"identificador_fiscal" binding:"omitnil,max=50"`
 }
@@ -54,9 +58,18 @@ func NewService(db *gorm.DB, jwtSecret string) *Service {
 }
 
 func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, error) {
-	email := strings.ToLower(strings.TrimSpace(req.Email))
+	identificador := strings.ToLower(strings.TrimSpace(req.Identificador))
+	if identificador == "" {
+		identificador = strings.ToLower(strings.TrimSpace(req.Email))
+	}
+	if identificador == "" {
+		return nil, ErrIdentificadorVacio
+	}
 
-	q := s.db.WithContext(ctx).Model(&usuarios.Usuario{}).Where("lower(usuarios.email) = ?", email)
+	q := s.db.WithContext(ctx).
+		Model(&usuarios.Usuario{}).
+		Where("lower(usuarios.email) = ? OR lower(usuarios.nombre_usuario) = ?", identificador, identificador)
+
 	if req.IdentificadorFiscal != nil && strings.TrimSpace(*req.IdentificadorFiscal) != "" {
 		nit := strings.TrimSpace(*req.IdentificadorFiscal)
 		q = q.Joins("JOIN empresas ON empresas.id = usuarios.empresa_id AND empresas.deleted_at IS NULL").

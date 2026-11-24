@@ -11,11 +11,17 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc            *Service
+	authMiddleware gin.HandlerFunc
 }
 
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+func (h *Handler) WithAuthMiddleware(mw gin.HandlerFunc) *Handler {
+	h.authMiddleware = mw
+	return h
 }
 
 // RegisterRoutes registra las rutas del módulo CRM bajo /crm.
@@ -47,6 +53,8 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	motivos.PATCH("/:id", h.actualizarMotivo)
 	motivos.DELETE("/:id", h.eliminarMotivo)
 
+	h.registerEtapaOportunidadRoutes(g)
+
 	// Leads y acciones del pipeline
 	leads := g.Group("/leads")
 	leads.POST("", h.crearLead)
@@ -71,6 +79,9 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	actividades.GET("", h.listarActividadesGlobal)
 	actividades.PATCH("/:id", h.actualizarActividad)
 	actividades.DELETE("/:id", h.eliminarActividad)
+
+	// Campañas de marketing, atribución de leads y gastos (autenticados por JWT)
+	h.registerCampanaRoutes(g)
 }
 
 // =====================================================================

@@ -24,7 +24,7 @@ export class LoginComponent {
   readonly errorMessage = signal<string | null>(null);
 
   readonly form = this.fb.nonNullable.group({
-    email: ['', [Validators.required, Validators.email, Validators.maxLength(255)]],
+    identificador: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(255)]],
     password: ['', [Validators.required, Validators.minLength(6), Validators.maxLength(72)]],
     identificador_fiscal: ['', [Validators.maxLength(50)]],
     recordar: [true],
@@ -51,7 +51,7 @@ export class LoginComponent {
 
     const raw = this.form.getRawValue();
     const payload: LoginRequest = {
-      email: raw.email.trim(),
+      identificador: raw.identificador.trim(),
       password: raw.password,
     };
     if (raw.identificador_fiscal.trim()) {
@@ -71,7 +71,7 @@ export class LoginComponent {
     });
   }
 
-  hasError(control: 'email' | 'password' | 'identificador_fiscal', error?: string): boolean {
+  hasError(control: 'identificador' | 'password' | 'identificador_fiscal', error?: string): boolean {
     const ctrl = this.form.controls[control];
     if (!ctrl.touched) return false;
     return error ? ctrl.hasError(error) : ctrl.invalid;
@@ -91,7 +91,7 @@ export class LoginComponent {
       if (code === 'empresa_requerida') {
         this.showEmpresaField.set(true);
         this.errorMessage.set(
-          'Este correo está registrado en varias empresas. Ingresa el NIT o identificador fiscal de tu empresa.',
+          'Este usuario o correo está registrado en varias empresas. Ingresa el NIT o identificador fiscal de tu empresa.',
         );
         return;
       }

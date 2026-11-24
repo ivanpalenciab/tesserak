@@ -1,0 +1,481 @@
+<section class="leads-page">
+  <header class="page-header">
+    <div>
+      <h1>Administrar leads</h1>
+      <p class="subtitle">
+        Gestiona tus prospectos comerciales, cambia su etapa en el embudo y registra conversiones.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarLeads()" [disabled]="loading()">
+        @if (loading()) {
+          Actualizando...
+        } @else {
+          Actualizar
+        }
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNuevoLead()">
+        + Nuevo lead
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- Barra de filtros -->
+  <section class="filters-panel" aria-label="Filtros de leads">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTexto()"
+        (input)="onBuscarTexto($any($event.target).value)"
+        placeholder="Buscar por nombre, empresa, correo, teléfono o Facebook..."
+        aria-label="Buscar leads"
+      />
+    </div>
+
+    <select
+      [value]="filtroEstadoId() ?? ''"
+      (change)="onFiltroEstado($any($event.target).value)"
+      aria-label="Filtrar por etapa"
+    >
+      <option value="">Todas las etapas</option>
+      @for (estado of estados(); track estado.id) {
+        <option [value]="estado.id">{{ estado.nombre }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroOrigenId() ?? ''"
+      (change)="onFiltroOrigen($any($event.target).value)"
+      aria-label="Filtrar por origen"
+    >
+      <option value="">Todos los orígenes</option>
+      @for (origen of origenes(); track origen.id) {
+        <option [value]="origen.id">{{ origen.nombre }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroTemperatura()"
+      (change)="onFiltroTemperatura($any($event.target).value)"
+      aria-label="Filtrar por temperatura"
+    >
+      <option value="">Temperatura</option>
+      @for (temp of temperaturas; track temp.value) {
+        <option [value]="temp.value">{{ temp.label }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroConvertido()"
+      (change)="onFiltroConvertido($any($event.target).value)"
+      aria-label="Filtrar por estado de conversión"
+    >
+      <option value="todos">Todos los estados</option>
+      <option value="activos">En proceso</option>
+      <option value="convertidos">Convertidos</option>
+    </select>
+
+    @if (hayFiltrosActivos()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltros()">Limpiar</button>
+    }
+  </section>
+
+  <!-- Tabla de leads -->
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>
+        Mostrando <strong>{{ leads().length }}</strong> de <strong>{{ total() }}</strong> leads
+      </span>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando leads...</div>
+    } @else if (leads().length === 0) {
+      <div class="empty-box">
+        @if (hayFiltrosActivos()) {
+          <p>No se encontraron leads con los filtros aplicados.</p>
+          <button type="button" class="btn-secondary" (click)="limpiarFiltros()">
+            Ver todos los leads
+          </button>
+        } @else {
+          <p>Aún no hay leads registrados para esta empresa.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevoLead()">
+            Crear primer lead
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Contacto</th>
+              <th>Origen</th>
+              <th>Etapa</th>
+              <th>Temperatura</th>
+              <th class="num">Valor est.</th>
+              <th>Estado</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (lead of leads(); track lead.id) {
+              <tr>
+                <td>
+                  <div class="lead-name">{{ lead.nombre }} {{ lead.apellido }}</div>
+                  @if (lead.nombre_empresa || lead.cargo) {
+                    <div class="lead-sub">
+                      {{ lead.cargo }}@if (lead.cargo && lead.nombre_empresa) { · }{{ lead.nombre_empresa }}
+                    </div>
+                  }
+                </td>
+
+                <td>
+                  @if (lead.email) {
+                    <div class="contact-line">{{ lead.email }}</div>
+                  }
+                  @if (lead.telefono) {
+                    <div class="lead-sub">{{ lead.telefono }}</div>
+                  }
+                  @if (lead.usuario_facebook) {
+                    <div class="lead-sub">FB: {{ lead.usuario_facebook }}</div>
+                  }
+                  @if (!lead.email && !lead.telefono && !lead.usuario_facebook) {
+                    <span class="muted">—</span>
+                  }
+                </td>
+
+                <td>
+                  <span class="origin-tag">{{ nombreOrigen(lead.origen_id) }}</span>
+                </td>
+
+                <td>
+                  @if (estados().length > 0) {
+                    <select
+                      class="stage-select"
+                      [value]="lead.estado_id"
+                      (change)="cambiarEstado(lead, $any($event.target).value)"
+                      [attr.aria-label]="'Cambiar etapa de ' + lead.nombre"
+                    >
+                      @for (estado of estados(); track estado.id) {
+                        <option [value]="estado.id">{{ estado.nombre }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span>{{ nombreEstado(lead.estado_id) }}</span>
+                  }
+                </td>
+
+                <td>
+                  <span class="temp-badge" [attr.data-temp]="lead.temperatura">
+                    {{ etiquetaTemperatura(lead.temperatura) }}
+                  </span>
+                  <span class="score-pill" title="Score comercial">{{ lead.score }} pts</span>
+                </td>
+
+                <td class="num">
+                  <strong>{{ lead.valor_estimado | currency: 'USD' : 'symbol' : '1.0-0' }}</strong>
+                </td>
+
+                <td>
+                  @if (lead.convertido) {
+                    <span class="status-badge converted">Convertido</span>
+                    @if (lead.fecha_conversion) {
+                      <div class="lead-sub">{{ lead.fecha_conversion | date: 'dd/MM/yyyy' }}</div>
+                    }
+                  } @else {
+                    <span class="status-badge active">En proceso</span>
+                  }
+                </td>
+
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="abrirEditarLead(lead)">
+                      Editar
+                    </button>
+                    @if (!lead.convertido) {
+                      <button
+                        type="button"
+                        class="btn-icon success"
+                        (click)="convertirLead(lead)"
+                      >
+                        Convertir
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      class="btn-icon danger"
+                      (click)="solicitarEliminar(lead)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPaginas() > 1) {
+        <footer class="pagination">
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() <= 1"
+            (click)="irAPagina(page() - 1)"
+          >
+            ← Anterior
+          </button>
+          <span class="page-info">Página {{ page() }} de {{ totalPaginas() }}</span>
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() >= totalPaginas()"
+            (click)="irAPagina(page() + 1)"
+          >
+            Siguiente →
+          </button>
+        </footer>
+      }
+    }
+  </section>
+</section>
+
+<!-- Modal Crear / Editar Lead -->
+@if (modalAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModal()">
+    <div
+      class="modal-card"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="leadEditando() ? 'Editar lead' : 'Nuevo lead'"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>{{ leadEditando() ? 'Editar lead' : 'Nuevo lead' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModal()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+
+      <form [formGroup]="leadForm" (ngSubmit)="guardarLead()" class="modal-form">
+        @if (origenes().length === 0 || estados().length === 0) {
+          <div class="alert warning">
+            Debes tener al menos un origen y una etapa configurados en el CRM para crear leads.
+          </div>
+        }
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Nombre *</span>
+            <input type="text" formControlName="nombre" placeholder="Ej. Ana" />
+          </label>
+
+          <label class="field">
+            <span>Apellido *</span>
+            <input type="text" formControlName="apellido" placeholder="Ej. Martínez" />
+          </label>
+
+          <label class="field">
+            <span>Empresa</span>
+            <input type="text" formControlName="nombre_empresa" placeholder="Ej. Acme S.A." />
+          </label>
+
+          <label class="field">
+            <span>Cargo</span>
+            <input type="text" formControlName="cargo" placeholder="Ej. Gerente Comercial" />
+          </label>
+
+          <label class="field">
+            <span>Correo electrónico</span>
+            <input type="email" formControlName="email" placeholder="ana@empresa.com" />
+          </label>
+
+          <label class="field">
+            <span>Teléfono</span>
+            <input type="tel" formControlName="telefono" placeholder="+57 300 000 0000" />
+          </label>
+
+          <label class="field full">
+            <span>Usuario de Facebook</span>
+            <input
+              type="text"
+              formControlName="usuario_facebook"
+              placeholder="Ej. ana.martinez"
+            />
+          </label>
+
+          <label class="field">
+            <span>Origen *</span>
+            <select formControlName="origen_id">
+              <option [ngValue]="null" disabled>Selecciona un origen</option>
+              @for (origen of origenes(); track origen.id) {
+                <option [ngValue]="origen.id">{{ origen.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Etapa *</span>
+            <select formControlName="estado_id">
+              <option [ngValue]="null" disabled>Selecciona una etapa</option>
+              @for (estado of estados(); track estado.id) {
+                <option [ngValue]="estado.id">{{ estado.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Temperatura</span>
+            <select formControlName="temperatura">
+              @for (temp of temperaturas; track temp.value) {
+                <option [value]="temp.value">{{ temp.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Score (0 - 100)</span>
+            <input type="number" min="0" max="100" formControlName="score" />
+          </label>
+
+          <label class="field full">
+            <span>Valor estimado (USD)</span>
+            <input type="number" min="0" step="0.01" formControlName="valor_estimado" />
+          </label>
+
+          <!-- Identificación de campaña de origen -->
+          <div class="campaign-section full">
+            <div class="campaign-section-title">Campaña de marketing (opcional)</div>
+
+            @if (leadEditando() && campanasDelLead().length > 0) {
+              <div class="linked-campaigns">
+                <span class="linked-label">Campañas asociadas:</span>
+                @for (asoc of campanasDelLead(); track asoc.id) {
+                  <span class="campaign-chip">
+                    {{ asoc.campana_nombre }}
+                    @if (asoc.tipo_atribucion) {
+                      <small>({{ asoc.tipo_atribucion }})</small>
+                    }
+                  </span>
+                }
+              </div>
+            }
+
+            <div class="form-grid">
+              <label class="field full">
+                <span>
+                  @if (leadEditando()) {
+                    Asociar a una campaña adicional
+                  } @else {
+                    ¿Proviene de una campaña identificada?
+                  }
+                </span>
+                <select formControlName="campana_id">
+                  <option [ngValue]="null">Sin campaña (orgánico / directo)</option>
+                  @for (campana of campanasHabilitadas(); track campana.id) {
+                    <option [ngValue]="campana.id">
+                      {{ campana.nombre }} ({{ campana.estado }})
+                    </option>
+                  }
+                </select>
+              </label>
+
+              @if (leadForm.controls.campana_id.value) {
+                <label class="field">
+                  <span>Tipo de atribución</span>
+                  <select formControlName="tipo_atribucion">
+                    @for (tipo of tiposAtribucion; track tipo.value) {
+                      <option [value]="tipo.value">{{ tipo.label }}</option>
+                    }
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>UTM Source</span>
+                  <input type="text" formControlName="utm_source" placeholder="Ej. facebook, google" />
+                </label>
+
+                <label class="field">
+                  <span>UTM Medium</span>
+                  <input type="text" formControlName="utm_medium" placeholder="Ej. cpc, email" />
+                </label>
+
+                <label class="field">
+                  <span>UTM Campaign</span>
+                  <input type="text" formControlName="utm_campaign" placeholder="Ej. black_friday_2026" />
+                </label>
+              }
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModal()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="btn-primary"
+            [disabled]="saving() || leadForm.invalid"
+          >
+            @if (saving()) {
+              Guardando...
+            } @else if (leadEditando()) {
+              Guardar cambios
+            } @else {
+              Crear lead
+            }
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminación -->
+@if (leadAEliminar(); as lead) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div
+      class="modal-card confirm-card"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirmar eliminación"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>Eliminar lead</h2>
+        <button type="button" class="btn-close" (click)="cancelarEliminar()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar el lead
+        <strong>{{ lead.nombre }} {{ lead.apellido }}</strong>? Esta acción no se puede deshacer.
+      </p>
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="cancelarEliminar()" [disabled]="saving()">
+          Cancelar
+        </button>
+        <button type="button" class="btn-danger" (click)="confirmarEliminar()" [disabled]="saving()">
+          @if (saving()) {
+            Eliminando...
+          } @else {
+            Eliminar
+          }
+        </button>
+      </footer>
+    </div>
+  </div>
+}

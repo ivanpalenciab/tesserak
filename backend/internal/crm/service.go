@@ -315,6 +315,7 @@ func (s *Service) CrearLead(ctx context.Context, req CrearLeadRequest) (*LeadRes
 		Cargo:             trimPtr(req.Cargo),
 		Email:             normalizarEmailPtr(req.Email),
 		Telefono:          trimPtr(req.Telefono),
+		UsuarioFacebook:   trimPtr(req.UsuarioFacebook),
 		Temperatura:       temp,
 		Score:             score,
 		ValorEstimado:     valor,
@@ -399,6 +400,9 @@ func (s *Service) ActualizarLead(ctx context.Context, id int64, req ActualizarLe
 		}
 		if req.Telefono != nil {
 			cambios["telefono"] = trimPtr(req.Telefono)
+		}
+		if req.UsuarioFacebook != nil {
+			cambios["usuario_facebook"] = trimPtr(req.UsuarioFacebook)
 		}
 		if req.Temperatura != nil {
 			cambios["temperatura"] = *req.Temperatura

@@ -91,6 +91,7 @@ type CrearLeadRequest struct {
 	Cargo             *string  `json:"cargo"               binding:"omitnil,max=100"`
 	Email             *string  `json:"email"               binding:"omitnil,email,max=255"`
 	Telefono          *string  `json:"telefono"            binding:"omitnil,max=50"`
+	UsuarioFacebook   *string  `json:"usuario_facebook"    binding:"omitnil,max=100"`
 	Temperatura       *string  `json:"temperatura"         binding:"omitnil,oneof=FRIO TIBIO CALIENTE"`
 	Score             *int32   `json:"score"               binding:"omitnil,gte=0,lte=100"`
 	ValorEstimado     *float64 `json:"valor_estimado"      binding:"omitnil,gte=0"`
@@ -110,6 +111,7 @@ type ActualizarLeadRequest struct {
 	Cargo             *string  `json:"cargo"               binding:"omitnil,max=100"`
 	Email             *string  `json:"email"               binding:"omitnil,email,max=255"`
 	Telefono          *string  `json:"telefono"            binding:"omitnil,max=50"`
+	UsuarioFacebook   *string  `json:"usuario_facebook"    binding:"omitnil,max=100"`
 	Temperatura       *string  `json:"temperatura"         binding:"omitnil,oneof=FRIO TIBIO CALIENTE"`
 	Score             *int32   `json:"score"               binding:"omitnil,gte=0,lte=100"`
 	ValorEstimado     *float64 `json:"valor_estimado"      binding:"omitnil,gte=0"`
@@ -155,6 +157,7 @@ type LeadResponse struct {
 	Cargo                         *string    `json:"cargo"`
 	Email                         *string    `json:"email"`
 	Telefono                      *string    `json:"telefono"`
+	UsuarioFacebook               *string    `json:"usuario_facebook"`
 	Temperatura                   string     `json:"temperatura"`
 	Score                         int32      `json:"score"`
 	ValorEstimado                 float64    `json:"valor_estimado"`
@@ -337,6 +340,7 @@ func toLeadResponse(l *Lead) LeadResponse {
 		Cargo:                         l.Cargo,
 		Email:                         l.Email,
 		Telefono:                      l.Telefono,
+		UsuarioFacebook:               l.UsuarioFacebook,
 		Temperatura:                   l.Temperatura,
 		Score:                         l.Score,
 		ValorEstimado:                 l.ValorEstimado,

@@ -1,0 +1,208 @@
+<section class="home">
+  <header class="hero">
+    <div>
+      <p class="hero-date">{{ hoy | date: "EEEE, d 'de' MMMM 'de' y" }}</p>
+      @if (usuario(); as u) {
+        <h1>Hola, {{ u.nombres }}</h1>
+        <p class="hero-sub">
+          Resumen operativo de tu espacio en <strong>Empresa #{{ u.empresa_id }}</strong> ·
+          Sucursal #{{ u.sucursal_id }}.
+        </p>
+      } @else {
+        <h1>Panel principal</h1>
+      }
+    </div>
+
+    <div class="hero-actions">
+      <button type="button" class="btn-secondary" (click)="recargar()" [disabled]="loading()">
+        @if (loading()) {
+          Actualizando...
+        } @else {
+          Actualizar datos
+        }
+      </button>
+      <a class="btn-primary" routerLink="/crm">Ir al CRM</a>
+    </div>
+  </header>
+
+  @if (!loading() && data() && !data()!.backendDisponible) {
+    <div class="notice-banner" role="status">
+      No se pudieron obtener métricas en vivo del backend (<code>localhost:8080</code>). Cuando la
+      API esté conectada a PostgreSQL, los indicadores se cargarán automáticamente.
+    </div>
+  }
+
+  <!-- KPIs principales -->
+  <div class="kpi-grid">
+    <article class="kpi-card">
+      <span class="kpi-label">Leads en CRM</span>
+      <strong class="kpi-value">{{ data()?.crm?.total_leads ?? 0 }}</strong>
+      <span class="kpi-meta">
+        Conversión: {{ (data()?.crm?.tasa_conversion_pct ?? 0) | number: '1.0-1' }}%
+        ({{ data()?.crm?.leads_convertidos ?? 0 }} ganados)
+      </span>
+    </article>
+
+    <article class="kpi-card">
+      <span class="kpi-label">Valor estimado pipeline</span>
+      <strong class="kpi-value">
+        {{ (data()?.crm?.valor_estimado_total ?? 0) | currency: 'USD' : 'symbol' : '1.0-0' }}
+      </strong>
+      <span class="kpi-meta">Suma de oportunidades activas</span>
+    </article>
+
+    <article class="kpi-card">
+      <span class="kpi-label">Actividades pendientes</span>
+      <strong class="kpi-value">{{ data()?.crm?.actividades_pendientes ?? 0 }}</strong>
+      <span class="kpi-meta" [class.danger]="(data()?.crm?.actividades_vencidas ?? 0) > 0">
+        {{ data()?.crm?.actividades_vencidas ?? 0 }} vencidas
+      </span>
+    </article>
+
+    <article class="kpi-card">
+      <span class="kpi-label">Usuarios activos</span>
+      <strong class="kpi-value">{{ data()?.totalUsuarios ?? '—' }}</strong>
+      <span class="kpi-meta">
+        {{ data()?.totalEmpresas ?? '—' }} empresas registradas
+      </span>
+    </article>
+  </div>
+
+  <!-- Contenido principal en 2 columnas -->
+  <div class="content-grid">
+    <div class="col-main">
+      <!-- Embudo comercial -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Embudo comercial (CRM)</h2>
+            <p>Distribución de leads por etapa del pipeline</p>
+          </div>
+          <a class="link-action" routerLink="/crm">Ver CRM →</a>
+        </div>
+
+        @if (data()?.crm?.por_etapa?.length) {
+          <div class="pipeline-list">
+            @for (etapa of data()!.crm!.por_etapa; track etapa.estado_id) {
+              <div class="pipeline-row">
+                <div class="pipeline-meta">
+                  <span class="pipeline-name">
+                    {{ etapa.nombre }}
+                    @if (etapa.es_estado_final) {
+                      <span class="tag-final">Final</span>
+                    }
+                  </span>
+                  <span class="pipeline-stats">
+                    <strong>{{ etapa.cantidad }}</strong> leads ·
+                    {{ etapa.valor_estimado | currency: 'USD' : 'symbol' : '1.0-0' }}
+                  </span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" [style.width.%]="porcentajeEtapa(etapa.cantidad)"></div>
+                </div>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="empty-state">
+            Aún no hay etapas configuradas en el CRM para esta empresa. Crea tus etapas en
+            <code>/api/v1/crm/estados</code> para visualizar el embudo aquí.
+          </div>
+        }
+      </section>
+
+      <!-- Módulos de Tesserak -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Módulos de Tesserak</h2>
+            <p>Accesos rápidos a las áreas funcionales de la plataforma</p>
+          </div>
+        </div>
+
+        <div class="modules-grid">
+          @for (m of modulos; track m.titulo) {
+            @if (m.route) {
+              <a class="module-card active" [routerLink]="m.route">
+                <div class="module-top">
+                  <h3>{{ m.titulo }}</h3>
+                  <span class="pill ok">{{ m.estado }}</span>
+                </div>
+                <p>{{ m.descripcion }}</p>
+              </a>
+            } @else {
+              <div class="module-card disabled">
+                <div class="module-top">
+                  <h3>{{ m.titulo }}</h3>
+                  <span class="pill soon">{{ m.estado }}</span>
+                </div>
+                <p>{{ m.descripcion }}</p>
+              </div>
+            }
+          }
+        </div>
+      </section>
+    </div>
+
+    <div class="col-side">
+      <!-- Temperatura de leads -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Temperatura de leads</h2>
+            <p>Prioridad comercial actual</p>
+          </div>
+        </div>
+
+        @if (data()?.crm?.por_temperatura?.length) {
+          <ul class="temp-list">
+            @for (t of data()!.crm!.por_temperatura; track t.temperatura) {
+              <li>
+                <span class="temp-badge" [class]="t.temperatura.toLowerCase()">
+                  {{ t.temperatura }}
+                </span>
+                <span class="temp-count">{{ t.cantidad }} leads</span>
+                <span class="temp-value">
+                  {{ t.valor_estimado | currency: 'USD' : 'symbol' : '1.0-0' }}
+                </span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="empty-state">Sin leads clasificados todavía.</div>
+        }
+      </section>
+
+      <!-- Actividades pendientes -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Próximas actividades</h2>
+            <p>Seguimientos pendientes del CRM</p>
+          </div>
+        </div>
+
+        @if (data()?.actividades?.length) {
+          <ul class="activity-list">
+            @for (act of data()!.actividades; track act.id) {
+              <li class="activity-item">
+                <div class="activity-top">
+                  <span class="activity-type">{{ act.tipo_actividad }}</span>
+                  @if (act.fecha_vencimiento) {
+                    <span class="activity-due" [class.overdue]="estaVencida(act.fecha_vencimiento)">
+                      {{ act.fecha_vencimiento | date: 'dd/MM HH:mm' }}
+                    </span>
+                  }
+                </div>
+                <p class="activity-title">{{ act.asunto }}</p>
+                <span class="activity-lead">Lead #{{ act.lead_id }}</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="empty-state">No tienes actividades pendientes en este momento.</div>
+        }
+      </section>
+    </div>
+  </div>
+</section>

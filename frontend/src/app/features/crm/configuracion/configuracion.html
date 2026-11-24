@@ -1,0 +1,516 @@
+<section class="config-page">
+  <header class="page-header">
+    <div>
+      <h1>Configuración del CRM</h1>
+      <p class="subtitle">
+        Administra orígenes, etapas de leads, etapas de oportunidades y motivos de descarte (con
+        eliminación lógica).
+      </p>
+    </div>
+  </header>
+
+  <nav class="tabs-bar" aria-label="Secciones de configuración del CRM">
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="tabActiva() === 'origenes'"
+      (click)="tabActiva.set('origenes')"
+    >
+      Orígenes ({{ origenes().length }})
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="tabActiva() === 'etapas'"
+      (click)="tabActiva.set('etapas')"
+    >
+      Etapas ({{ etapas().length }})
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="tabActiva() === 'etapas_oportunidad'"
+      (click)="tabActiva.set('etapas_oportunidad')"
+    >
+      Etapas de oportunidades ({{ etapasOportunidad().length }})
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="tabActiva() === 'motivos'"
+      (click)="tabActiva.set('motivos')"
+    >
+      Motivos de descarte ({{ motivos().length }})
+    </button>
+  </nav>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- ==================== 1. ORÍGENES ==================== -->
+  @if (tabActiva() === 'origenes') {
+    <section class="config-card">
+      <div class="card-header">
+        <div>
+          <h2>Orígenes</h2>
+          <p class="card-sub">Canales generales de captación (Web, Facebook, Instagram, Referido, etc.).</p>
+        </div>
+        <div class="card-actions">
+          <select
+            [value]="filtroEstadoOrigen()"
+            (change)="filtroEstadoOrigen.set($any($event.target).value)"
+            aria-label="Filtrar orígenes"
+          >
+            <option value="todos">Todos ({{ origenes().length }})</option>
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+          </select>
+          <button type="button" class="btn-primary" (click)="abrirNuevoOrigen()">
+            + Nuevo origen
+          </button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="empty-box">Cargando orígenes...</div>
+      } @else if (origenesFiltrados().length === 0) {
+        <div class="empty-box">
+          <p>No hay orígenes para mostrar.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevoOrigen()">
+            Crear origen
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (origen of origenesFiltrados(); track origen.id) {
+                <tr>
+                  <td><span class="cell-title">{{ origen.nombre }}</span></td>
+                  <td>
+                    <span class="status-badge" [class.active]="origen.activo" [class.inactive]="!origen.activo">
+                      {{ origen.activo ? 'Activo' : 'Inactivo' }}
+                    </span>
+                  </td>
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon" (click)="abrirEditarOrigen(origen)">Editar</button>
+                      <button type="button" class="btn-icon" (click)="toggleActivoOrigen(origen)">
+                        {{ origen.activo ? 'Desactivar' : 'Activar' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminar('origenes', origen.id, origen.nombre)"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- ==================== 2. ETAPAS DE LEADS ==================== -->
+  @if (tabActiva() === 'etapas') {
+    <section class="config-card">
+      <div class="card-header">
+        <div>
+          <h2>Etapas de leads</h2>
+          <p class="card-sub">Estados ordenados por los que avanza un lead antes de convertirse o descartarse.</p>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="btn-primary" (click)="abrirNuevaEtapa()">
+            + Nueva etapa
+          </button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="empty-box">Cargando etapas...</div>
+      } @else if (etapas().length === 0) {
+        <div class="empty-box">
+          <p>Aún no hay etapas configuradas.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevaEtapa()">
+            Crear primera etapa
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Orden</th>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (etapa of etapas(); track etapa.id) {
+                <tr>
+                  <td><span class="order-pill">#{{ etapa.orden }}</span></td>
+                  <td><span class="cell-title">{{ etapa.nombre }}</span></td>
+                  <td>
+                    @if (etapa.es_estado_final) {
+                      <span class="status-badge final">Estado final</span>
+                    } @else {
+                      <span class="status-badge active">En proceso</span>
+                    }
+                  </td>
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon" (click)="abrirEditarEtapa(etapa)">Editar</button>
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminar('etapas', etapa.id, etapa.nombre)"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- ==================== 3. ETAPAS DE OPORTUNIDADES ==================== -->
+  @if (tabActiva() === 'etapas_oportunidad') {
+    <section class="config-card">
+      <div class="card-header">
+        <div>
+          <h2>Etapas de oportunidades</h2>
+          <p class="card-sub">Fases del pipeline comercial con probabilidad de cierre y estados ganada/perdida.</p>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="btn-primary" (click)="abrirNuevaEtapaOp()">
+            + Nueva etapa de oportunidad
+          </button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="empty-box">Cargando etapas de oportunidades...</div>
+      } @else if (etapasOportunidad().length === 0) {
+        <div class="empty-box">
+          <p>Aún no hay etapas de oportunidades configuradas.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevaEtapaOp()">
+            Crear primera etapa
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Orden</th>
+                <th>Nombre</th>
+                <th>Probabilidad</th>
+                <th>Cierre</th>
+                <th>Estado</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (etapa of etapasOportunidad(); track etapa.id) {
+                <tr>
+                  <td><span class="order-pill">#{{ etapa.orden }}</span></td>
+                  <td><span class="cell-title">{{ etapa.nombre }}</span></td>
+                  <td>{{ etapa.probabilidad_pct }}%</td>
+                  <td>
+                    @if (etapa.es_ganada) {
+                      <span class="status-badge active">Ganada</span>
+                    } @else if (etapa.es_perdida) {
+                      <span class="status-badge lost">Perdida</span>
+                    } @else {
+                      <span class="status-badge final">Abierta</span>
+                    }
+                  </td>
+                  <td>
+                    <span class="status-badge" [class.active]="etapa.activo" [class.inactive]="!etapa.activo">
+                      {{ etapa.activo ? 'Activa' : 'Inactiva' }}
+                    </span>
+                  </td>
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon" (click)="abrirEditarEtapaOp(etapa)">Editar</button>
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminar('etapas_oportunidad', etapa.id, etapa.nombre)"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- ==================== 4. MOTIVOS DE DESCARTE ==================== -->
+  @if (tabActiva() === 'motivos') {
+    <section class="config-card">
+      <div class="card-header">
+        <div>
+          <h2>Motivos de descarte</h2>
+          <p class="card-sub">Razones estandarizadas cuando un lead u oportunidad se descarta o se pierde.</p>
+        </div>
+        <div class="card-actions">
+          <select
+            [value]="filtroEstadoMotivo()"
+            (change)="filtroEstadoMotivo.set($any($event.target).value)"
+            aria-label="Filtrar motivos de descarte"
+          >
+            <option value="todos">Todos ({{ motivos().length }})</option>
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+          </select>
+          <button type="button" class="btn-primary" (click)="abrirNuevoMotivo()">
+            + Nuevo motivo
+          </button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="empty-box">Cargando motivos de descarte...</div>
+      } @else if (motivosFiltrados().length === 0) {
+        <div class="empty-box">
+          <p>No hay motivos de descarte para mostrar.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevoMotivo()">
+            Crear motivo
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th>Estado</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (motivo of motivosFiltrados(); track motivo.id) {
+                <tr>
+                  <td><span class="cell-title">{{ motivo.descripcion }}</span></td>
+                  <td>
+                    <span class="status-badge" [class.active]="motivo.activo" [class.inactive]="!motivo.activo">
+                      {{ motivo.activo ? 'Activo' : 'Inactivo' }}
+                    </span>
+                  </td>
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon" (click)="abrirEditarMotivo(motivo)">Editar</button>
+                      <button type="button" class="btn-icon" (click)="toggleActivoMotivo(motivo)">
+                        {{ motivo.activo ? 'Desactivar' : 'Activar' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminar('motivos', motivo.id, motivo.descripcion)"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</section>
+
+<!-- ==================== MODAL ORIGEN ==================== -->
+@if (modalOrigenAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalOrigen()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>{{ origenEditando() ? 'Editar origen' : 'Nuevo origen' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalOrigen()" aria-label="Cerrar">×</button>
+      </header>
+      <form [formGroup]="origenForm" (ngSubmit)="guardarOrigen()" class="modal-form">
+        <label class="field">
+          <span>Nombre del origen *</span>
+          <input type="text" formControlName="nombre" placeholder="Ej. Facebook, WhatsApp, Página web" />
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Activo</span>
+        </label>
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalOrigen()" [disabled]="saving()">Cancelar</button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || origenForm.invalid">
+            {{ origenEditando() ? 'Guardar cambios' : 'Crear origen' }}
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- ==================== MODAL ETAPA DE LEAD ==================== -->
+@if (modalEtapaAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalEtapa()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>{{ etapaEditando() ? 'Editar etapa' : 'Nueva etapa' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalEtapa()" aria-label="Cerrar">×</button>
+      </header>
+      <form [formGroup]="etapaForm" (ngSubmit)="guardarEtapa()" class="modal-form">
+        <label class="field">
+          <span>Nombre de la etapa *</span>
+          <input type="text" formControlName="nombre" placeholder="Ej. Nuevo, Contactado, Calificado" />
+        </label>
+        <label class="field">
+          <span>Orden *</span>
+          <input type="number" min="0" formControlName="orden" />
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="es_estado_final" />
+          <span>Es estado final (cierre / descarte)</span>
+        </label>
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalEtapa()" [disabled]="saving()">Cancelar</button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || etapaForm.invalid">
+            {{ etapaEditando() ? 'Guardar cambios' : 'Crear etapa' }}
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- ==================== MODAL ETAPA DE OPORTUNIDAD ==================== -->
+@if (modalEtapaOpAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalEtapaOp()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>{{ etapaOpEditando() ? 'Editar etapa de oportunidad' : 'Nueva etapa de oportunidad' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalEtapaOp()" aria-label="Cerrar">×</button>
+      </header>
+      <form [formGroup]="etapaOpForm" (ngSubmit)="guardarEtapaOp()" class="modal-form">
+        <label class="field">
+          <span>Nombre de la etapa *</span>
+          <input type="text" formControlName="nombre" placeholder="Ej. Propuesta, Negociación, Cierre" />
+        </label>
+        <div class="form-row">
+          <label class="field">
+            <span>Orden *</span>
+            <input type="number" min="0" formControlName="orden" />
+          </label>
+          <label class="field">
+            <span>Probabilidad (%) *</span>
+            <input type="number" min="0" max="100" formControlName="probabilidad_pct" />
+          </label>
+        </div>
+        <label class="checkbox-field">
+          <input
+            type="checkbox"
+            formControlName="es_ganada"
+            (change)="onToggleGanada($any($event.target).checked)"
+          />
+          <span>Etapa de cierre ganada</span>
+        </label>
+        <label class="checkbox-field">
+          <input
+            type="checkbox"
+            formControlName="es_perdida"
+            (change)="onTogglePerdida($any($event.target).checked)"
+          />
+          <span>Etapa de cierre perdida</span>
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Activa</span>
+        </label>
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalEtapaOp()" [disabled]="saving()">Cancelar</button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || etapaOpForm.invalid">
+            {{ etapaOpEditando() ? 'Guardar cambios' : 'Crear etapa' }}
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- ==================== MODAL MOTIVO DE DESCARTE ==================== -->
+@if (modalMotivoAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalMotivo()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>{{ motivoEditando() ? 'Editar motivo de descarte' : 'Nuevo motivo de descarte' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalMotivo()" aria-label="Cerrar">×</button>
+      </header>
+      <form [formGroup]="motivoForm" (ngSubmit)="guardarMotivo()" class="modal-form">
+        <label class="field">
+          <span>Descripción *</span>
+          <input type="text" formControlName="descripcion" placeholder="Ej. Presupuesto insuficiente, Competencia" />
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Activo</span>
+        </label>
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalMotivo()" [disabled]="saving()">Cancelar</button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || motivoForm.invalid">
+            {{ motivoEditando() ? 'Guardar cambios' : 'Crear motivo' }}
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- ==================== MODAL CONFIRMAR ELIMINACIÓN (SOFT DELETE) ==================== -->
+@if (eliminando(); as item) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Confirmar eliminación</h2>
+        <button type="button" class="btn-close" (click)="cancelarEliminar()" aria-label="Cerrar">×</button>
+      </header>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar <strong>{{ item.etiqueta }}</strong>? El registro se deshabilitará
+        mediante eliminación lógica (soft delete) conservando el historial.
+      </p>
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="cancelarEliminar()" [disabled]="saving()">Cancelar</button>
+        <button type="button" class="btn-danger" (click)="confirmarEliminar()" [disabled]="saving()">
+          {{ saving() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+}

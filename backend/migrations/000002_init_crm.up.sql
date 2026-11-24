@@ -93,6 +93,7 @@ CREATE TABLE crm_leads (
     cargo                              VARCHAR(100),
     email                              VARCHAR(255),
     telefono                           VARCHAR(50),
+    usuario_facebook                   VARCHAR(100),
     temperatura                        VARCHAR(20)    NOT NULL DEFAULT 'TIBIO',
     score                              INT            NOT NULL DEFAULT 0,
     valor_estimado                     NUMERIC(14,4)  NOT NULL DEFAULT 0,

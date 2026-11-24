@@ -66,19 +66,19 @@
 
       <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
         <div class="field">
-          <label for="email">Correo electrónico</label>
+          <label for="identificador">Correo electrónico o usuario</label>
           <input
-            id="email"
-            type="email"
-            formControlName="email"
-            autocomplete="email"
-            placeholder="nombre@empresa.com"
-            [class.invalid]="hasError('email')"
+            id="identificador"
+            type="text"
+            formControlName="identificador"
+            autocomplete="username"
+            placeholder="jperez o nombre@empresa.com"
+            [class.invalid]="hasError('identificador')"
           />
-          @if (hasError('email', 'required')) {
-            <span class="field-error">El correo electrónico es obligatorio.</span>
-          } @else if (hasError('email', 'email')) {
-            <span class="field-error">Ingresa un correo electrónico válido.</span>
+          @if (hasError('identificador', 'required')) {
+            <span class="field-error">Ingresa tu correo electrónico o nombre de usuario.</span>
+          } @else if (hasError('identificador', 'minlength')) {
+            <span class="field-error">Debe tener al menos 3 caracteres.</span>
           }
         </div>
 

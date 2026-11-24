@@ -217,8 +217,8 @@ func (r *Repository) ListLeads(ctx context.Context, f ListarLeadsQuery) ([]Lead,
 	if s := strings.TrimSpace(f.Q); s != "" {
 		like := "%" + escapeLike(s) + "%"
 		q = q.Where(
-			"nombre ILIKE ? OR apellido ILIKE ? OR nombre_empresa ILIKE ? OR email ILIKE ? OR telefono ILIKE ?",
-			like, like, like, like, like,
+			"nombre ILIKE ? OR apellido ILIKE ? OR nombre_empresa ILIKE ? OR email ILIKE ? OR telefono ILIKE ? OR usuario_facebook ILIKE ?",
+			like, like, like, like, like, like,
 		)
 	}
 
