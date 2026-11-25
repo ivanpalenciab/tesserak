@@ -1,0 +1,748 @@
+<section class="precios-page">
+  <header class="page-header">
+    <div>
+      <h1>Listas de precios</h1>
+      <p class="subtitle">
+        Administra los esquemas comerciales de precios de tu empresa (general, mayorista,
+        minorista o especial) y define los precios vigentes por artículo.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="btn-secondary"
+        (click)="cargarListas()"
+        [disabled]="loadingListas()"
+      >
+        @if (loadingListas()) {
+          Actualizando...
+        } @else {
+          Actualizar
+        }
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNuevaLista()">
+        + Nueva lista de precios
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- Filtros de listas de precios -->
+  <section class="filters-panel" aria-label="Filtros de listas de precios">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTextoLista()"
+        (input)="onBuscarLista($any($event.target).value)"
+        placeholder="Buscar lista de precios por nombre..."
+        aria-label="Buscar listas de precios"
+      />
+    </div>
+
+    <select
+      [value]="filtroTipoLista()"
+      (change)="onFiltroTipoLista($any($event.target).value)"
+      aria-label="Filtrar por tipo de lista"
+    >
+      <option value="">Todos los tipos</option>
+      @for (t of tiposLista; track t.value) {
+        <option [value]="t.value">{{ t.label }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroMonedaId() ?? ''"
+      (change)="onFiltroMoneda($any($event.target).value)"
+      aria-label="Filtrar por moneda"
+    >
+      <option value="">Todas las monedas</option>
+      @for (m of monedas(); track m.id) {
+        <option [value]="m.id">{{ m.codigo_iso }} — {{ m.nombre_moneda }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroEstadoLista()"
+      (change)="onFiltroEstadoLista($any($event.target).value)"
+      aria-label="Filtrar por estado"
+    >
+      <option value="todas">Todos los estados</option>
+      <option value="activas">Activas</option>
+      <option value="inactivas">Inactivas</option>
+    </select>
+
+    @if (hayFiltrosLista()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltrosLista()">Limpiar</button>
+    }
+  </section>
+
+  <!-- Tabla de listas de precios de la empresa -->
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>
+        Mostrando <strong>{{ listas().length }}</strong> de <strong>{{ totalListas() }}</strong>
+        listas de precios de tu empresa
+      </span>
+      <span class="meta-hint">Haz clic en una lista para administrar los precios de sus artículos</span>
+    </div>
+
+    @if (loadingListas()) {
+      <div class="empty-box">Cargando listas de precios...</div>
+    } @else if (listas().length === 0) {
+      <div class="empty-box">
+        @if (hayFiltrosLista()) {
+          <p>No se encontraron listas de precios con los filtros aplicados.</p>
+          <button type="button" class="btn-secondary" (click)="limpiarFiltrosLista()">
+            Ver todas las listas
+          </button>
+        } @else {
+          <p>Tu empresa aún no tiene listas de precios configuradas.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevaLista()">
+            Crear primera lista de precios
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Lista de precios</th>
+              <th>Tipo</th>
+              <th>Moneda</th>
+              <th>Vigencia</th>
+              <th>Estado</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (lista of listas(); track lista.id) {
+              <tr
+                class="selectable-row"
+                [class.selected]="listaSeleccionada()?.id === lista.id"
+                (click)="seleccionarLista(lista)"
+              >
+                <td>
+                  <div class="cell-title">{{ lista.nombre }}</div>
+                </td>
+
+                <td class="nowrap">
+                  <span class="tipo-badge" [attr.data-tipo]="lista.tipo_lista">
+                    {{ etiquetaTipo(lista.tipo_lista) }}
+                  </span>
+                </td>
+
+                <td class="nowrap">{{ etiquetaMoneda(lista) }}</td>
+
+                <td class="nowrap">
+                  <span>{{ lista.vigencia_desde }}</span>
+                  <span class="date-sep">→</span>
+                  <span>{{ lista.vigencia_hasta || 'Sin fecha fin' }}</span>
+                </td>
+
+                <td>
+                  <span
+                    class="status-badge"
+                    [class.active]="lista.estado"
+                    [class.inactive]="!lista.estado"
+                  >
+                    {{ lista.estado ? 'Activa' : 'Inactiva' }}
+                  </span>
+                </td>
+
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="btn-icon primary-soft"
+                      (click)="seleccionarLista(lista); $event.stopPropagation()"
+                    >
+                      Ver precios
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      (click)="abrirEditarLista(lista, $event)"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [class.success]="!lista.estado"
+                      [class.warning]="lista.estado"
+                      (click)="toggleEstadoLista(lista, $event)"
+                    >
+                      {{ lista.estado ? 'Desactivar' : 'Activar' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon danger"
+                      (click)="solicitarEliminarLista(lista, $event)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPaginasListas() > 1) {
+        <div class="pagination">
+          <span class="page-info">
+            Página {{ pageListas() }} de {{ totalPaginasListas() }}
+          </span>
+          <div class="row-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="irPaginaListas(pageListas() - 1)"
+              [disabled]="pageListas() <= 1"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="irPaginaListas(pageListas() + 1)"
+              [disabled]="pageListas() >= totalPaginasListas()"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </section>
+
+  <!-- Panel de detalle: se despliega únicamente al hacer clic en una lista -->
+  @if (listaSeleccionada(); as listaActiva) {
+    <section class="detail-section" aria-label="Artículos y precios de la lista seleccionada">
+      <div class="detail-header">
+        <div>
+          <div class="detail-title-row">
+            <h2>Artículos en: {{ listaActiva.nombre }}</h2>
+            <span class="tipo-badge" [attr.data-tipo]="listaActiva.tipo_lista">
+              {{ etiquetaTipo(listaActiva.tipo_lista) }}
+            </span>
+            <span class="currency-pill">{{ etiquetaMoneda(listaActiva) }}</span>
+          </div>
+          <p class="subtitle">
+            Vigencia de la lista: {{ listaActiva.vigencia_desde }} →
+            {{ listaActiva.vigencia_hasta || 'Sin fecha fin' }} ·
+            <strong>{{ resumenAsignacion().conPrecio }}</strong> con precio ·
+            <strong class="pending-count">{{ resumenAsignacion().sinPrecio }}</strong> sin precio
+            asignado (de {{ resumenAsignacion().totalActivos }} artículos activos)
+          </p>
+        </div>
+
+        <div class="header-actions">
+          <button type="button" class="btn-secondary" (click)="cerrarDetalleLista()">
+            Ocultar artículos
+          </button>
+          <button type="button" class="btn-primary" (click)="abrirNuevoDetalle()">
+            + Agregar precio
+          </button>
+        </div>
+      </div>
+
+      <div class="filters-panel compact">
+        <div class="filter-search">
+          <input
+            type="search"
+            [value]="filtroTextoDetalle()"
+            (input)="onBuscarDetalle($any($event.target).value)"
+            placeholder="Buscar artículo por código o nombre..."
+            aria-label="Buscar precios por artículo"
+          />
+        </div>
+
+        <select
+          [value]="filtroAsignacion()"
+          (change)="onFiltroAsignacion($any($event.target).value)"
+          aria-label="Filtrar por asignación de precio"
+        >
+          <option value="todos">Todos los artículos activos</option>
+          <option value="con_precio">Con precio asignado</option>
+          <option value="sin_precio">Sin precio asignado</option>
+        </select>
+
+        <select
+          [value]="filtroUnidadDetalleId() ?? ''"
+          (change)="onFiltroUnidadDetalle($any($event.target).value)"
+          aria-label="Filtrar por unidad de medida"
+        >
+          <option value="">Todas las unidades</option>
+          @for (u of unidades(); track u.id) {
+            <option [value]="u.id">{{ u.nombre }}</option>
+          }
+        </select>
+
+        @if (hayFiltrosDetalle()) {
+          <button type="button" class="btn-link" (click)="limpiarFiltrosDetalle()">Limpiar</button>
+        }
+      </div>
+
+      <div class="table-panel">
+        <div class="table-meta">
+          <span>
+            Mostrando <strong>{{ filasPaginadas().length }}</strong> de
+            <strong>{{ filasFiltradas().length }}</strong> registros
+          </span>
+        </div>
+
+        @if (loadingDetalles()) {
+          <div class="empty-box">Cargando artículos y precios...</div>
+        } @else if (articulos().length === 0) {
+          <div class="empty-box">
+            <p>Tu empresa aún no tiene artículos activos en el catálogo.</p>
+          </div>
+        } @else if (filasFiltradas().length === 0) {
+          <div class="empty-box">
+            <p>No se encontraron artículos con los filtros aplicados.</p>
+            <button type="button" class="btn-secondary" (click)="limpiarFiltrosDetalle()">
+              Ver todos los artículos activos
+            </button>
+          </div>
+        } @else {
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Artículo</th>
+                  <th>Precio asignado</th>
+                  <th>Unidad</th>
+                  <th>Cant. mínima</th>
+                  <th>Vigencia específica</th>
+                  <th class="actions-col">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (fila of filasPaginadas(); track fila.key) {
+                  <tr [class.unassigned-row]="!fila.detalle">
+                    <td class="nowrap">
+                      <span class="sku-pill">{{ fila.articulo.codigo }}</span>
+                    </td>
+
+                    <td>
+                      <div class="cell-title">{{ fila.articulo.nombre }}</div>
+                    </td>
+
+                    <td class="nowrap">
+                      @if (fila.detalle; as det) {
+                        <span class="price-cell">
+                          {{ formatearPrecio(det.precio, listaActiva) }}
+                        </span>
+                      } @else {
+                        <span class="unassigned-badge">Sin precio asignado</span>
+                      }
+                    </td>
+
+                    <td class="nowrap">
+                      @if (fila.detalle; as det) {
+                        {{ nombreUnidad(det.unidad_medida_id, det.unidad_medida_nombre) }}
+                      } @else {
+                        {{ nombreUnidad(fila.articulo.unidad_medida_id) }}
+                      }
+                    </td>
+
+                    <td class="nowrap">
+                      @if (fila.detalle; as det) {
+                        {{ det.cantidad_minima }}
+                      } @else {
+                        <span class="muted">—</span>
+                      }
+                    </td>
+
+                    <td class="nowrap">
+                      @if (fila.detalle; as det) {
+                        @if (det.vigencia_desde || det.vigencia_hasta) {
+                          <span>{{ det.vigencia_desde || 'Inicio lista' }}</span>
+                          <span class="date-sep">→</span>
+                          <span>{{ det.vigencia_hasta || 'Fin lista' }}</span>
+                        } @else {
+                          <span class="muted">Hereda de la lista</span>
+                        }
+                      } @else {
+                        <span class="muted">—</span>
+                      }
+                    </td>
+
+                    <td class="actions-col">
+                      <div class="row-actions">
+                        @if (fila.detalle; as det) {
+                          <button
+                            type="button"
+                            class="btn-icon"
+                            (click)="abrirEditarDetalle(det)"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            class="btn-icon danger"
+                            (click)="solicitarEliminarDetalle(det)"
+                          >
+                            Eliminar
+                          </button>
+                        } @else {
+                          <button
+                            type="button"
+                            class="btn-icon primary-soft"
+                            (click)="abrirNuevoDetalle(fila.articulo)"
+                          >
+                            + Asignar precio
+                          </button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (totalPaginasDetalles() > 1) {
+            <div class="pagination">
+              <span class="page-info">
+                Página {{ pageDetalles() }} de {{ totalPaginasDetalles() }}
+              </span>
+              <div class="row-actions">
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  (click)="irPaginaDetalles(pageDetalles() - 1)"
+                  [disabled]="pageDetalles() <= 1"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  (click)="irPaginaDetalles(pageDetalles() + 1)"
+                  [disabled]="pageDetalles() >= totalPaginasDetalles()"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  }
+</section>
+
+<!-- Modal Crear / Editar Lista de Precios -->
+@if (modalListaAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalLista()">
+    <div class="modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>{{ editandoLista() ? 'Editar lista de precios' : 'Nueva lista de precios' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalLista()" aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="formLista" (ngSubmit)="guardarLista()">
+        @if (modalListaError(); as err) {
+          <div class="alert error" role="alert">{{ err }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field full">
+            <span>Nombre de la lista *</span>
+            <input
+              type="text"
+              formControlName="nombre"
+              placeholder="Ej: Lista General 2026, Mayoristas, Distribuidores"
+            />
+            @if (formLista.controls.nombre.touched && formLista.controls.nombre.invalid) {
+              <small class="field-error">Ingresa un nombre válido (máximo 150 caracteres).</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Tipo de lista *</span>
+            <select formControlName="tipo_lista">
+              @for (t of tiposLista; track t.value) {
+                <option [value]="t.value">{{ t.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Moneda *</span>
+            <select formControlName="moneda_id">
+              <option [ngValue]="null">Seleccionar moneda...</option>
+              @for (m of monedas(); track m.id) {
+                <option [ngValue]="m.id">{{ m.codigo_iso }} — {{ m.nombre_moneda }}</option>
+              }
+            </select>
+            @if (formLista.controls.moneda_id.touched && formLista.controls.moneda_id.invalid) {
+              <small class="field-error">Selecciona una moneda.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Vigencia desde *</span>
+            <input type="date" formControlName="vigencia_desde" />
+            @if (
+              formLista.controls.vigencia_desde.touched &&
+              formLista.controls.vigencia_desde.invalid
+            ) {
+              <small class="field-error">La fecha inicial es obligatoria.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Vigencia hasta (opcional)</span>
+            <input type="date" formControlName="vigencia_hasta" />
+          </label>
+        </div>
+
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="estado" />
+          <span>Lista activa</span>
+        </label>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarModalLista()"
+            [disabled]="savingLista()"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="savingLista()">
+            @if (savingLista()) {
+              Guardando...
+            } @else {
+              {{ editandoLista() ? 'Guardar cambios' : 'Crear lista' }}
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminar Lista -->
+@if (listaAEliminar(); as target) {
+  <div class="modal-backdrop" (click)="cancelarEliminarLista()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Eliminar lista de precios</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cancelarEliminarLista()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar la lista de precios <strong>{{ target.nombre }}</strong>?
+        Esta acción desactivará la lista y ya no aparecerá disponible en el catálogo comercial.
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarEliminarLista()"
+          [disabled]="savingLista()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarEliminarLista()"
+          [disabled]="savingLista()"
+        >
+          {{ savingLista() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal Crear / Editar Precio de Artículo -->
+@if (modalDetalleAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalDetalle()">
+    <div class="modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>{{ editandoDetalle() ? 'Editar precio de artículo' : 'Agregar precio de artículo' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalDetalle()" aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="formDetalle" (ngSubmit)="guardarDetalle()">
+        @if (modalDetalleError(); as err) {
+          <div class="alert error" role="alert">{{ err }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field full">
+            <span>Artículo *</span>
+            <select
+              formControlName="articulo_id"
+              (change)="onSeleccionarArticulo($any($event.target).value)"
+            >
+              <option [ngValue]="null">Seleccionar artículo...</option>
+              @for (art of articulos(); track art.id) {
+                <option [ngValue]="art.id">{{ art.codigo }} — {{ art.nombre }}</option>
+              }
+            </select>
+            @if (formDetalle.controls.articulo_id.touched && formDetalle.controls.articulo_id.invalid) {
+              <small class="field-error">Selecciona un artículo.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Precio de venta *</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              formControlName="precio"
+              placeholder="0.00"
+            />
+            @if (formDetalle.controls.precio.touched && formDetalle.controls.precio.invalid) {
+              <small class="field-error">Ingresa un precio mayor o igual a 0.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Unidad de medida *</span>
+            <select formControlName="unidad_medida_id">
+              <option [ngValue]="null">Seleccionar unidad...</option>
+              @for (u of unidades(); track u.id) {
+                <option [ngValue]="u.id">{{ u.nombre }}</option>
+              }
+            </select>
+            @if (
+              formDetalle.controls.unidad_medida_id.touched &&
+              formDetalle.controls.unidad_medida_id.invalid
+            ) {
+              <small class="field-error">Selecciona una unidad de medida.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Cantidad mínima *</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0.0001"
+              formControlName="cantidad_minima"
+              placeholder="1"
+            />
+            @if (
+              formDetalle.controls.cantidad_minima.touched &&
+              formDetalle.controls.cantidad_minima.invalid
+            ) {
+              <small class="field-error">Debe ser mayor a 0.</small>
+            }
+          </label>
+
+          <div class="field"></div>
+
+          <label class="field">
+            <span>Vigencia desde (opcional)</span>
+            <input type="date" formControlName="vigencia_desde" />
+          </label>
+
+          <label class="field">
+            <span>Vigencia hasta (opcional)</span>
+            <input type="date" formControlName="vigencia_hasta" />
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarModalDetalle()"
+            [disabled]="savingDetalle()"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="savingDetalle()">
+            @if (savingDetalle()) {
+              Guardando...
+            } @else {
+              {{ editandoDetalle() ? 'Guardar cambios' : 'Agregar precio' }}
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminar Detalle -->
+@if (detalleAEliminar(); as target) {
+  <div class="modal-backdrop" (click)="cancelarEliminarDetalle()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Eliminar precio</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cancelarEliminarDetalle()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar el precio de
+        <strong>{{ target.articulo_nombre || 'este artículo' }}</strong> de esta lista?
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarEliminarDetalle()"
+          [disabled]="savingDetalle()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarEliminarDetalle()"
+          [disabled]="savingDetalle()"
+        >
+          {{ savingDetalle() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
