@@ -5,16 +5,13 @@
 
   <aside class="sidebar" [class.open]="mobileMenuOpen()">
     <div class="sidebar-header">
-      <a class="brand" routerLink="/dashboard" (click)="closeMobileMenu()">
-        <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
-          <rect x="4" y="4" width="32" height="32" rx="6" stroke="currentColor" stroke-width="2.2" />
-          <rect x="12" y="12" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.2" />
-          <path d="M4 4L12 12M36 4L28 12M4 36L12 28M36 36L28 28" stroke="currentColor" stroke-width="1.8" />
-        </svg>
-        <div>
-          <span class="brand-name">Tesserak</span>
-          <span class="brand-sub">Suite Empresarial</span>
-        </div>
+      <a class="brand" routerLink="/dashboard" (click)="closeMobileMenu()" aria-label="Tesserak — Inicio">
+        <img
+          src="/logo_fondo_blanco.svg"
+          alt="Tesserak"
+          class="brand-logo-img"
+        />
+        <span class="brand-sub">Suite Empresarial</span>
       </a>
     </div>
 
