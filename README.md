@@ -76,7 +76,10 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   │   ├── 000003_add_nombre_paises.*     # Columna nombre en paises
 │   │   ├── 000004_add_usuario_facebook_crm_leads.* # Campo opcional usuario_facebook en crm_leads
 │   │   ├── 000005_init_crm_campanas.*     # crm_tipos_campana, crm_campanas, crm_campana_leads, crm_campana_gastos
-│   │   └── 000006_init_crm_etapas_oportunidad.*    # crm_etapa_oportunidad
+│   │   ├── 000006_init_crm_etapas_oportunidad.*    # crm_etapa_oportunidad (renombrada en 000007)
+│   │   ├── 000007_init_crm_oportunidades.*         # crm_estado_oportunidades y crm_oportunidades
+│   │   ├── 000008_init_productos.*                 # unidades_medida, categorias_producto, marcas, grupos_impuesto, productos
+│   │   └── 000009_refactor_articulos_productos_servicios.* # articulos -> productos / servicios + catálogos
 │   └── internal/
 │       ├── auth/                          # Login, bcrypt, JWT HS256 y middleware RequireAuth
 │       ├── config/                        # Carga de .env y variables de entorno
@@ -84,7 +87,8 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │       ├── httpx/                         # AppError uniforme y formateo de errores de validación
 │       ├── empresas/                      # CRUD de empresas (soft delete)
 │       ├── usuarios/                      # CRUD de usuarios (1 sucursal, bcrypt, soft delete)
-│       └── crm/                           # Módulo CRM completo:
+│       ├── productos/                     # Artículos (productos físicos y servicios), categorías, marcas, impuestos y catálogos
+│       └── crm/                           # Módulo CRM completo (leads, oportunidades, campañas, configuración)
 │           ├── models.go / dto.go / repository.go / service.go / handler.go
 │           ├── campana_models.go / campana_dto.go / campana_repository.go / campana_service.go / campana_handler.go
 │           ├── etapa_oportunidad.go       # Catálogo de etapas de oportunidades
@@ -170,7 +174,10 @@ Las migraciones están en `backend/migrations/`, se embeben en el binario median
 | `000003` | Nombre corto en países | Agrega columna `nombre` en `paises` |
 | `000004` | Contacto social en leads | Agrega columna opcional `usuario_facebook VARCHAR(100)` en `crm_leads` |
 | `000005` | Módulo de campañas de marketing | `crm_tipos_campana` (con 7 tipos semilla), `crm_campanas`, `crm_campana_leads` (atribución + UTM), `crm_campana_gastos` y `uq_crm_leads_id_empresa` |
-| `000006` | Etapas de oportunidades | `crm_etapa_oportunidad` (orden, probabilidad %, ganada/perdida, soft delete) |
+| `000006` | Etapas de oportunidades | `crm_etapa_oportunidad` (renombrada en `000007`) |
+| `000007` | Oportunidades comerciales | Renombra a `crm_estado_oportunidades` y crea `crm_oportunidades` |
+| `000008` | Catálogos de productos por empresa | `unidades_medida`, `categorias_producto`, `marcas`, `grupos_impuesto`, `productos` |
+| `000009` | Supertipo–Subtipo de artículos | `tipos_articulo`, `metodos_valoracion`, `modalidades_servicio`, `articulos` → `productos` (1:1) / `servicios` (1:1, duración en horas), `grupo_impuesto_id` obligatorio y `marca_id` opcional |
 
 El diagrama relacional completo y actualizado está en [tesserak_modelo_corregido.drawio](tesserak_modelo_corregido.drawio) (editable en [diagrams.net](https://app.diagrams.net/)) y la documentación detallada de convenciones de BD en [documentacion base de datos.md](documentacion%20base%20de%20datos.md).
 
@@ -216,6 +223,20 @@ Base URL local: `http://localhost:8080`
   - `POST / GET /api/v1/crm/campanas/:id/gastos`
   - `GET / PATCH / DELETE /api/v1/crm/gastos/:id`
 
+### Productos y Servicios (`/api/v1/productos`, requieren `Authorization: Bearer <jwt>`)
+- **Catálogos**:
+  - `GET /api/v1/productos/tipos-articulo` (`PRODUCTO`, `SERVICIO`)
+  - `GET /api/v1/productos/metodos-valoracion` (`FIFO`, `PROMEDIO_PONDERADO`, `IDENTIFICACION_ESPECIFICA`)
+  - `GET /api/v1/productos/modalidades-servicio` (`POR_HORA`, `PROYECTO`, `UNIDAD`, `SUSCRIPCION`)
+  - `GET /api/v1/productos/unidades-medida`
+  - `GET /api/v1/productos/grupos-impuesto`
+  - `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/productos/categorias` (soft delete)
+  - `POST / GET / PATCH :id / DELETE :id` en `/api/v1/productos/marcas` (soft delete)
+- **Artículos (`articulos` + extensión `productos` o `servicios`)**:
+  - `POST /api/v1/productos` — Crea artículo + subtipo en transacción (`codigo`, `nombre`, `tipo_articulo_id`, `unidad_medida_id`, `categoria_id`, `grupo_impuesto_id` obligatorios; `marca_id` opcional; bloque `producto` o `servicio` con `duracion_estimada` en horas).
+  - `GET /api/v1/productos` — Listado paginado (`tipo_articulo_id`, `categoria_id`, `estado`, `q`, `page`, `page_size`).
+  - `GET / PATCH / DELETE /api/v1/productos/:id` — Consulta, actualización transaccional y **soft delete**.
+
 ---
 
 ## 7. Módulos y navegación del Frontend
@@ -229,9 +250,11 @@ Base URL local: `http://localhost:8080`
 | `/crm/campanas` | Implementado | Administración de campañas, tipos de campaña, ciclo de vida, indicadores, leads asociados y gastos |
 | `/crm/configuracion` | Implementado | Configuración CRUD (con soft delete) de Orígenes, Etapas, Etapas de oportunidades y Motivos de descarte |
 | `/crm/empresas-contactos` | Base lista | Sección pendiente |
-| `/crm/oportunidades` | Base lista | Sección pendiente |
-| `/crm/pipeline` | Base lista | Sección pendiente |
-| `/crm/actividades` | Base lista | Sección pendiente |
+| `/crm/oportunidades` | Implementado | Administración de oportunidades (`crm_oportunidades` y `crm_estado_oportunidades`) |
+| `/crm/pipeline` | Base lista (`Pronto`) | Sección pendiente |
+| `/crm/actividades` | Base lista (`Pronto`) | Sección pendiente |
+| `/productos/catalogo` | Implementado | Catálogo de productos físicos y servicios (`articulos` → `productos` / `servicios`) |
+| `/productos/categorias` | Implementado | Administración CRUD (soft delete) de categorías de productos |
 
 ---
 

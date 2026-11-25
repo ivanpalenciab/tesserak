@@ -18,6 +18,7 @@ import (
 	"tesserak/backend/internal/crm"
 	"tesserak/backend/internal/database"
 	"tesserak/backend/internal/empresas"
+	"tesserak/backend/internal/productos"
 	"tesserak/backend/internal/usuarios"
 )
 
@@ -66,6 +67,10 @@ func main() {
 	crm.NewHandler(crm.NewService(crm.NewRepository(db))).
 		WithAuthMiddleware(auth.RequireAuth(cfg.JWTSecret)).
 		RegisterRoutes(api)
+	productos.NewHandler(
+		productos.NewService(productos.NewRepository(db)),
+		auth.RequireAuth(cfg.JWTSecret),
+	).RegisterRoutes(api)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

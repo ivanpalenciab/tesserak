@@ -16,7 +16,8 @@ Este documento describe cómo está diseñada y construida la base de datos de *
 | **Multi-tenant con discriminador (`empresa_id`)** | `sucursales`, `usuarios`, `crm_*`, `ventas`, `compras`, `lealtad_*`, `empresa_productos`, `tercero_empresa` | Múltiples empresas comparten la misma base de datos con aislamiento lógico por `empresa_id`. |
 | **Integridad multi-tenant por FK compuesta** | `usuarios (sucursal_id, empresa_id)`, `crm_leads (sucursal_id/origen_id/estado_id/motivo_descarte_id, empresa_id)` | Impide a nivel de motor que un registro de la empresa A referencie una sucursal, origen, estado o motivo de la empresa B. |
 | **Soft Delete + Índices únicos parciales** | `empresas`, `sucursales`, `usuarios`, `crm_origen_lead`, `crm_estado_lead`, `crm_motivo_descarte`, `crm_leads`, `crm_lead_actividades` | `deleted_at TIMESTAMPTZ` conserva el historial sin borrar físicamente. Los índices `UNIQUE (...) WHERE deleted_at IS NULL` permiten reutilizar emails, nombres de usuario o NITs de registros eliminados. |
-| **Catálogo maestro + Vinculación por empresa** | `maestro_productos` → `empresa_productos`; `tercero_maestro` → `tercero_empresa` | Evita duplicar información base (productos o personas/empresas) entre tenants, permitiendo configuración propia por empresa. |
+| **Catálogo maestro + Vinculación por empresa** | `tercero_maestro` → `tercero_empresa` | Evita duplicar información base de terceros entre tenants, permitiendo configuración propia por empresa. |
+| **Supertipo–Subtipo para Artículos (Productos y Servicios)** | `articulos` → `productos` / `servicios` | Aísla los artículos por empresa (`empresa_id`) y separa los atributos comunes (`codigo`, `nombre`, `unidad_medida_id`, `categoria_id`, `grupo_impuesto_id`, `marca_id` opcional) de las extensiones 1:1 para productos físicos e inventario vs. servicios (duración en horas, modalidad, programación). |
 | **Party / Role (Supertipo–Subtipo / Class Table Inheritance)** | `tercero_maestro` → `tercero_empresa` → `tercero_empresa_roles` → `clientes` / `proveedores` / `empleados` | Una misma persona o empresa puede ser simultáneamente cliente, proveedor y empleado sin duplicar sus datos de identidad. |
 | **Header–Detail (Cabecera–Detalle)** | `ventas` / `ventas_detalle`, `compras` / `compras_detalle`, `documento_inventario` / `movimiento_inventario_detalle` | Separa metadatos y totales del documento de sus líneas de ítems. |
 | **Ledger (Libro mayor inmutable) + Saldo materializado** | `lealtad_transacciones` + `lealtad_cuentas.saldo_puntos`; `movimiento_inventario_detalle` + `inventario_stock` | Mantiene trazabilidad completa de cada movimiento mientras conserva un saldo/stock actualizado para lecturas rápidas. |
@@ -98,6 +99,12 @@ erDiagram
 | `crm_leads` | Implementada (`000002`) | Prospectos comerciales con datos de contacto, calificación (`temperatura`: `FRIO`/`TIBIO`/`CALIENTE`, `score`: 0–100), `valor_estimado`, asignación a usuario, estado actual y trazabilidad de conversión (`convertido`, `fecha_conversion`, `convertido_tercero_empresa_rol_id`). | **Entidad transaccional multi-tenant + FK compuestas + Soft Delete + Conversión a Party/Role**. |
 | `crm_lead_actividades` | Implementada (`000002`) | Historial y agenda de seguimiento sobre cada lead (`LLAMADA`, `CORREO`, `REUNION`, `WHATSAPP`, `TAREA`, `NOTA`) con fecha de vencimiento y estado (`PENDIENTE`, `COMPLETADA`, `CANCELADA`). | **Activity Log / Task Tracking + Soft Delete**. |
 | `crm_lead_interes_productos` | Implementada (`000002`) | Productos, categorías o notas de interés asociadas a un lead con su cantidad estimada. | **Relación 1:N de detalle con referencia flexible (producto, categoría o nota)**. |
+| `crm_tipos_campana` | Implementada (`000005`) | Catálogo de tipos de campaña de marketing por empresa con 7 valores semilla. | **Catálogo por tenant + Soft Delete**. |
+| `crm_campanas` | Implementada (`000005`) | Campañas de marketing con vigencia, presupuesto, moneda, estado y trazabilidad multiempresa. | **Entidad multi-tenant + FK compuestas + Soft Delete**. |
+| `crm_campana_leads` | Implementada (`000005`) | Relación N:M entre campañas y leads con atribución (`first_touch`/`last_touch`/`influencia`) y parámetros UTM. | **Tabla puente N:M multi-tenant + Índice parcial `first_touch`**. |
+| `crm_campana_gastos` | Implementada (`000005`) | Registro de gastos asociados a cada campaña en su moneda correspondiente. | **Relación 1:N multi-tenant + Soft Delete**. |
+| `crm_estado_oportunidades` | Implementada (`000006`/`000007`) | Etapas ordenadas de oportunidades con probabilidad (%) y banderas `es_ganada`/`es_perdida`. | **Máquina de estados configurable + Soft Delete**. |
+| `crm_oportunidades` | Implementada (`000007`) | Negociaciones comerciales vinculables a lead y campaña, con valor estimado, prioridad y fecha de cierre. | **Entidad multi-tenant + FK compuestas + Soft Delete**. |
 
 ### 3.5 Terceros (Clientes, Proveedores y Empleados)
 
@@ -113,16 +120,22 @@ erDiagram
 | `cargos` | Diseñada | Catálogo de cargos laborales para empleados. | **Lookup / Catálogo**. |
 | `tipos_contrato` | Diseñada | Catálogo de tipos de contrato laboral (Indefinido, Fijo, Prestación de servicios, etc.). | **Lookup / Catálogo**. |
 
-### 3.6 Catálogo de Productos
+### 3.6 Catálogo de Artículos (Productos y Servicios)
+
+> **Decisión arquitectónica (`000008` y `000009`):** Los artículos NO se comparten globalmente entre empresas. Se eliminó el esquema `maestro_productos` + `empresa_productos` y se implementó el patrón **Class Table Inheritance (Supertipo–Subtipo)** aislado por `empresa_id`: `articulos` contiene los datos comunes y se extiende 1:1 en `productos` (físicos) y `servicios`.
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
-| `maestro_productos` | Diseñada | Definición base compartida de productos (`referencia`, `nombre`, `descripcion`, unidad de medida, categoría, marca, grupo de impuesto). | **Catálogo maestro compartido**. |
-| `empresa_productos` | Diseñada | Habilita y vincula productos del maestro para una empresa específica. | **Tabla puente N:M (Maestro → Tenant)**. |
-| `categorias_producto` | Diseñada | Clasificación de productos por categoría. | **Lookup / Catálogo**. |
-| `marcas` | Diseñada | Catálogo de marcas comerciales. | **Lookup / Catálogo**. |
-| `unidades_medida` | Diseñada | Unidades de medida (Unidad, Kg, Litro, Caja, etc.). | **Lookup / Catálogo**. |
-| `grupos_impuesto` | Diseñada | Esquemas tributarios y tarifas porcentuales aplicables a productos (ej. IVA 19%, Exento 0%). | **Lookup / Catálogo fiscal**. |
+| `articulos` | Implementada (`000009`) | Información común de productos y servicios por empresa: `codigo` (único por empresa), `nombre`, `descripcion`, `tipo_articulo_id`, `unidad_medida_id`, `categoria_id` (obligatoria), `grupo_impuesto_id` (obligatorio), `marca_id` (opcional), `estado` y `deleted_at`. | **Supertipo multi-tenant + FK compuestas + Soft Delete**. |
+| `productos` | Implementada (`000009`) | Extensión 1:1 de `articulos` (`articulo_id` PK/FK) para artículos físicos: `control_inventario`, `metodo_valoracion_id` (obligatorio si controla inventario), `permite_compra` y `permite_venta`. | **Class Table Inheritance (Subtipo 1:1)**. |
+| `servicios` | Implementada (`000009`) | Extensión 1:1 de `articulos` (`articulo_id` PK/FK) para servicios: `modalidad_id`, `duracion_estimada` (en horas), `requiere_programacion` y `control_consumos`. | **Class Table Inheritance (Subtipo 1:1)**. |
+| `tipos_articulo` | Implementada (`000009`) | Catálogo discriminador (`PRODUCTO`, `SERVICIO`). | **Lookup / Catálogo**. |
+| `metodos_valoracion` | Implementada (`000009`) | Métodos de valoración de inventario (`FIFO`, `PROMEDIO_PONDERADO`, `IDENTIFICACION_ESPECIFICA`). | **Lookup / Catálogo**. |
+| `modalidades_servicio` | Implementada (`000009`) | Modalidades de prestación de servicios (`POR_HORA`, `PROYECTO`, `UNIDAD`, `SUSCRIPCION`). | **Lookup / Catálogo**. |
+| `categorias_producto` | Implementada (`000008`) | Clasificación de artículos por categoría aislada por empresa (soft delete). | **Catálogo por tenant + Soft Delete**. |
+| `marcas` | Implementada (`000008`) | Catálogo opcional de marcas comerciales por empresa (soft delete). | **Catálogo por tenant + Soft Delete**. |
+| `unidades_medida` | Implementada (`000008`) | Unidades de comercialización (`UND`, `KG`, `LT`, `MT`, `CJ`, etc.). | **Lookup / Catálogo**. |
+| `grupos_impuesto` | Implementada (`000008`) | Esquemas tributarios y tarifas porcentuales por empresa (ej. Exento 0%, IVA 19%) con soft delete. Obligatorio en `articulos`. | **Catálogo fiscal por tenant + Soft Delete**. |
 
 ### 3.7 Inventario y Bodegas
 
