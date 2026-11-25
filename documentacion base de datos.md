@@ -13,13 +13,13 @@ Este documento describe cómo está diseñada y construida la base de datos de *
 
 | Patrón | Dónde se aplica | Qué resuelve |
 |---|---|---|
-| **Multi-tenant con discriminador (`empresa_id`)** | `sucursales`, `usuarios`, `crm_*`, `ventas`, `compras`, `lealtad_*`, `empresa_productos`, `tercero_empresa` | Múltiples empresas comparten la misma base de datos con aislamiento lógico por `empresa_id`. |
+| **Multi-tenant con discriminador (`empresa_id`)** | `sucursales`, `usuarios`, `crm_*`, `articulos`, `listas_precios`, `ventas`, `compras`, `lealtad_*`, `tercero_empresa` | Múltiples empresas comparten la misma base de datos con aislamiento lógico por `empresa_id`. |
 | **Integridad multi-tenant por FK compuesta** | `usuarios (sucursal_id, empresa_id)`, `crm_leads (sucursal_id/origen_id/estado_id/motivo_descarte_id, empresa_id)` | Impide a nivel de motor que un registro de la empresa A referencie una sucursal, origen, estado o motivo de la empresa B. |
-| **Soft Delete + Índices únicos parciales** | `empresas`, `sucursales`, `usuarios`, `crm_origen_lead`, `crm_estado_lead`, `crm_motivo_descarte`, `crm_leads`, `crm_lead_actividades` | `deleted_at TIMESTAMPTZ` conserva el historial sin borrar físicamente. Los índices `UNIQUE (...) WHERE deleted_at IS NULL` permiten reutilizar emails, nombres de usuario o NITs de registros eliminados. |
+| **Soft Delete + Índices únicos parciales** | `empresas`, `sucursales`, `usuarios`, `crm_*`, `articulos`, `listas_precios` | `deleted_at TIMESTAMPTZ` conserva el historial sin borrar físicamente. Los índices `UNIQUE (...) WHERE deleted_at IS NULL` permiten reutilizar emails, nombres de usuario o NITs de registros eliminados. |
 | **Catálogo maestro + Vinculación por empresa** | `tercero_maestro` → `tercero_empresa` | Evita duplicar información base de terceros entre tenants, permitiendo configuración propia por empresa. |
 | **Supertipo–Subtipo para Artículos (Productos y Servicios)** | `articulos` → `productos` / `servicios` | Aísla los artículos por empresa (`empresa_id`) y separa los atributos comunes (`codigo`, `nombre`, `unidad_medida_id`, `categoria_id`, `grupo_impuesto_id`, `marca_id` opcional) de las extensiones 1:1 para productos físicos e inventario vs. servicios (duración en horas, modalidad, programación). |
 | **Party / Role (Supertipo–Subtipo / Class Table Inheritance)** | `tercero_maestro` → `tercero_empresa` → `tercero_empresa_roles` → `clientes` / `proveedores` / `empleados` | Una misma persona o empresa puede ser simultáneamente cliente, proveedor y empleado sin duplicar sus datos de identidad. |
-| **Header–Detail (Cabecera–Detalle)** | `ventas` / `ventas_detalle`, `compras` / `compras_detalle`, `documento_inventario` / `movimiento_inventario_detalle` | Separa metadatos y totales del documento de sus líneas de ítems. |
+| **Header–Detail (Cabecera–Detalle)** | `listas_precios` / `lista_precios_detalle`, `ventas` / `ventas_detalle`, `compras` / `compras_detalle`, `documento_inventario` / `movimiento_inventario_detalle` | Separa metadatos y totales del documento (o cabecera comercial) de sus líneas de ítems. |
 | **Ledger (Libro mayor inmutable) + Saldo materializado** | `lealtad_transacciones` + `lealtad_cuentas.saldo_puntos`; `movimiento_inventario_detalle` + `inventario_stock` | Mantiene trazabilidad completa de cada movimiento mientras conserva un saldo/stock actualizado para lecturas rápidas. |
 | **RBAC (Control de acceso basado en roles)** | `usuarios` ↔ `usuario_roles` ↔ `roles_sistema` ↔ `rol_permisos` ↔ `permisos` | Desacopla usuarios de permisos mediante roles asignables. |
 | **Feature Flags por tenant (Suscripción modular)** | `modulos` ↔ `modulo_empresa` | Permite activar o desactivar módulos funcionales por empresa. |
@@ -137,7 +137,47 @@ erDiagram
 | `unidades_medida` | Implementada (`000008`) | Unidades de comercialización (`UND`, `KG`, `LT`, `MT`, `CJ`, etc.). | **Lookup / Catálogo**. |
 | `grupos_impuesto` | Implementada (`000008`) | Esquemas tributarios y tarifas porcentuales por empresa (ej. Exento 0%, IVA 19%) con soft delete. Obligatorio en `articulos`. | **Catálogo fiscal por tenant + Soft Delete**. |
 
-### 3.7 Inventario y Bodegas
+### 3.7 Listas de Precios
+
+Permite gestionar múltiples esquemas comerciales de precios por empresa (general, mayorista, minorista, especial), con soporte para vigencias, moneda, unidad de medida y precios escalonados por cantidad mínima.
+
+| Tabla | Estado | Para qué sirve | Patrón de diseño |
+|---|---|---|---|
+| `listas_precios` | Implementada (`000011`) | Define los diferentes esquemas comerciales de precios por empresa (`nombre`, `moneda_id`, `tipo_lista`, `vigencia_desde`, `vigencia_hasta`, `estado`). | **Header–Detail + Multi-tenant + Soft Delete**. |
+| `lista_precios_detalle` | Implementada (`000011`) | Contiene los precios específicos de cada artículo dentro de una lista (`lista_precio_id`, `articulo_id`, `precio`, `unidad_medida_id`, `cantidad_minima`, `vigencia_desde`, `vigencia_hasta`). | **Header–Detail (Líneas de precio con vigencia y escalas por cantidad)**. |
+
+#### Estructura de `listas_precios`
+
+| Campo | Tipo | Clave | Descripción |
+|---|---|---|---|
+| `id` | `INT` | PK | Identificador |
+| `empresa_id` | `INT` | FK → `empresas.id` | Empresa propietaria |
+| `nombre` | `VARCHAR(150)` | — | Nombre de la lista |
+| `moneda_id` | `INT` | FK → `monedas.id` | Moneda |
+| `tipo_lista` | `VARCHAR(30)` | — | Tipo de lista (`GENERAL`, `MAYORISTA`, `MINORISTA`, `ESPECIAL`) |
+| `vigencia_desde` | `DATE` | — | Fecha inicial de vigencia |
+| `vigencia_hasta` | `DATE` (null) | — | Fecha final de vigencia |
+| `estado` | `BOOLEAN` | — | Activa/inactiva |
+| `created_at` | `TIMESTAMPTZ` | — | Fecha de creación (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | — | Fecha de última actualización (UTC) |
+| `deleted_at` | `TIMESTAMPTZ` (null) | — | Eliminación lógica (soft delete) |
+
+#### Estructura de `lista_precios_detalle`
+
+| Campo | Tipo | Clave | Descripción |
+|---|---|---|---|
+| `id` | `BIGINT` | PK | Identificador |
+| `lista_precio_id` | `INT` | FK → `listas_precios.id` | Lista de precios a la que pertenece |
+| `articulo_id` | `INT` | FK → `articulos.id` | Artículo al que aplica el precio |
+| `precio` | `NUMERIC(14,2)` | — | Precio de venta |
+| `unidad_medida_id` | `INT` | FK → `unidades_medida.id` | Unidad de medida a la que aplica |
+| `cantidad_minima` | `NUMERIC(14,4)` | — | Cantidad mínima para aplicar el precio |
+| `vigencia_desde` | `DATE` (null) | — | Inicio de vigencia del precio |
+| `vigencia_hasta` | `DATE` (null) | — | Fin de vigencia del precio |
+| `created_at` | `TIMESTAMPTZ` | — | Fecha de creación (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | — | Fecha de última actualización (UTC) |
+
+### 3.8 Inventario y Bodegas
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
@@ -147,7 +187,7 @@ erDiagram
 | `movimiento_inventario_detalle` | Diseñada | Líneas de cada documento de inventario con producto, ubicación origen/destino, cantidad, costo unitario y moneda. | **Header–Detail + Ledger de inventario (Kardex)**. |
 | `inventario_stock` | Diseñada | Saldo actual y costo promedio ponderado por `empresa_producto_id` y `ubicacion_id`. | **Materialized Balance / Snapshot de existencias**. |
 
-### 3.8 Ventas y Compras
+### 3.9 Ventas y Compras
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
@@ -156,7 +196,7 @@ erDiagram
 | `compras` | Diseñada | Cabecera de compras a proveedores (consecutivo, factura del proveedor, fechas de compra y vencimiento, totales, usuario y sucursal). | **Header–Detail + Documento transaccional**. |
 | `compras_detalle` | Diseñada | Ítems comprados con cantidad, subtotal, impuesto y total. | **Header–Detail**. |
 
-### 3.9 Programa de Lealtad
+### 3.10 Programa de Lealtad
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
