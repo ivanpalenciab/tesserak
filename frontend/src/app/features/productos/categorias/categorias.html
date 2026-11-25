@@ -1,0 +1,207 @@
+<section class="categorias-page">
+  <header class="page-header">
+    <div>
+      <h1>Categorías de productos</h1>
+      <p class="subtitle">
+        Crea, modifica, activa o desactiva y elimina (soft delete) las categorías de tu catálogo.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarCategorias()" [disabled]="loading()">
+        @if (loading()) {
+          Actualizando...
+        } @else {
+          Actualizar
+        }
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNueva()">
+        + Nueva categoría
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <section class="filters-panel" aria-label="Filtros de categorías">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTexto()"
+        (input)="onBuscarTexto($any($event.target).value)"
+        placeholder="Buscar categoría por nombre..."
+        aria-label="Buscar categorías"
+      />
+    </div>
+
+    <select
+      [value]="filtroEstado()"
+      (change)="onFiltroEstado($any($event.target).value)"
+      aria-label="Filtrar por estado"
+    >
+      <option value="todos">Todos los estados</option>
+      <option value="activos">Activas</option>
+      <option value="inactivos">Inactivas</option>
+    </select>
+
+    @if (hayFiltrosActivos()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltros()">Limpiar</button>
+    }
+  </section>
+
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>Total: <strong>{{ categorias().length }}</strong> categorías</span>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando categorías...</div>
+    } @else if (categorias().length === 0) {
+      <div class="empty-box">
+        @if (hayFiltrosActivos()) {
+          <p>No se encontraron categorías con los filtros aplicados.</p>
+          <button type="button" class="btn-secondary" (click)="limpiarFiltros()">
+            Ver todas las categorías
+          </button>
+        } @else {
+          <p>Aún no hay categorías creadas para esta empresa.</p>
+          <button type="button" class="btn-primary" (click)="abrirNueva()">
+            Crear primera categoría
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Estado</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (cat of categorias(); track cat.id) {
+              <tr>
+                <td><span class="cell-title">{{ cat.nombre }}</span></td>
+                <td>
+                  <span
+                    class="status-badge"
+                    [class.active]="cat.activo"
+                    [class.inactive]="!cat.activo"
+                  >
+                    {{ cat.activo ? 'Activa' : 'Inactiva' }}
+                  </span>
+                </td>
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="abrirEditar(cat)">
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [class.success]="!cat.activo"
+                      [class.warning]="cat.activo"
+                      (click)="toggleActivo(cat)"
+                    >
+                      {{ cat.activo ? 'Desactivar' : 'Activar' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon danger"
+                      (click)="solicitarEliminar(cat)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</section>
+
+@if (modalAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModal()">
+    <div
+      class="modal-card"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="editando() ? 'Editar categoría' : 'Nueva categoría'"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>{{ editando() ? 'Editar categoría' : 'Nueva categoría' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModal()" aria-label="Cerrar">×</button>
+      </header>
+
+      <form [formGroup]="form" (ngSubmit)="guardar()" class="modal-form">
+        <label class="field">
+          <span>Nombre de la categoría *</span>
+          <input type="text" formControlName="nombre" placeholder="Ej. Tecnología, Servicios, Accesorios" />
+        </label>
+
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Categoría activa</span>
+        </label>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModal()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || form.invalid">
+            @if (saving()) {
+              Guardando...
+            } @else if (editando()) {
+              Guardar cambios
+            } @else {
+              Crear categoría
+            }
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+@if (aEliminar(); as cat) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div
+      class="modal-card confirm-card"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirmar eliminación"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>Eliminar categoría</h2>
+        <button type="button" class="btn-close" (click)="cancelarEliminar()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar la categoría <strong>{{ cat.nombre }}</strong>? Se aplicará
+        eliminación lógica (soft delete).
+      </p>
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="cancelarEliminar()" [disabled]="saving()">
+          Cancelar
+        </button>
+        <button type="button" class="btn-danger" (click)="confirmarEliminar()" [disabled]="saving()">
+          {{ saving() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+}

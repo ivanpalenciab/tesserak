@@ -105,6 +105,32 @@ export const routes: Routes = [
         ],
       },
       {
+        path: 'productos',
+        children: [
+          {
+            path: 'catalogo',
+            loadComponent: () =>
+              import('./features/productos/catalogo/catalogo').then(
+                (m) => m.ProductosCatalogoComponent,
+              ),
+            title: 'Catálogo de productos — Tesserak',
+          },
+          {
+            path: 'categorias',
+            loadComponent: () =>
+              import('./features/productos/categorias/categorias').then(
+                (m) => m.ProductosCategoriasComponent,
+              ),
+            title: 'Categorías de productos — Tesserak',
+          },
+          {
+            path: '',
+            pathMatch: 'full',
+            redirectTo: 'catalogo',
+          },
+        ],
+      },
+      {
         path: 'empresas',
         loadComponent: () =>
           import('./features/coming-soon/coming-soon').then((m) => m.ComingSoonComponent),

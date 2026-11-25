@@ -1,0 +1,488 @@
+<section class="productos-page">
+  <header class="page-header">
+    <div>
+      <h1>Catálogo de productos y servicios</h1>
+      <p class="subtitle">
+        Administra artículos físicos (productos) y servicios exclusivos de tu empresa.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarProductos()" [disabled]="loading()">
+        @if (loading()) {
+          Actualizando...
+        } @else {
+          Actualizar
+        }
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNuevo()">
+        + Nuevo artículo
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- Barra de filtros -->
+  <section class="filters-panel" aria-label="Filtros de artículos">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTexto()"
+        (input)="onBuscarTexto($any($event.target).value)"
+        placeholder="Buscar por código, nombre o descripción..."
+        aria-label="Buscar artículos"
+      />
+    </div>
+
+    <select
+      [value]="filtroTipoId() ?? ''"
+      (change)="onFiltroTipo($any($event.target).value)"
+      aria-label="Filtrar por tipo"
+    >
+      <option value="">Todos los tipos</option>
+      @for (t of tiposArticulo(); track t.id) {
+        <option [value]="t.id">{{ t.nombre }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroCategoriaId() ?? ''"
+      (change)="onFiltroCategoria($any($event.target).value)"
+      aria-label="Filtrar por categoría"
+    >
+      <option value="">Todas las categorías</option>
+      @for (cat of categorias(); track cat.id) {
+        <option [value]="cat.id">{{ cat.nombre }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroEstado()"
+      (change)="onFiltroEstado($any($event.target).value)"
+      aria-label="Filtrar por estado"
+    >
+      <option value="todos">Todos los estados</option>
+      <option value="activos">Activos</option>
+      <option value="inactivos">Inactivos</option>
+    </select>
+
+    @if (hayFiltrosActivos()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltros()">Limpiar</button>
+    }
+  </section>
+
+  <!-- Tabla de artículos -->
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>
+        Mostrando <strong>{{ productos().length }}</strong> de <strong>{{ total() }}</strong>
+        artículos
+      </span>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando catálogo...</div>
+    } @else if (productos().length === 0) {
+      <div class="empty-box">
+        @if (hayFiltrosActivos()) {
+          <p>No se encontraron artículos con los filtros aplicados.</p>
+          <button type="button" class="btn-secondary" (click)="limpiarFiltros()">
+            Ver todo el catálogo
+          </button>
+        } @else {
+          <p>Aún no hay productos ni servicios registrados para tu empresa.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevo()">
+            Crear primer artículo
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Artículo</th>
+              <th>Tipo</th>
+              <th>Categoría</th>
+              <th>Unidad</th>
+              <th>Impuesto</th>
+              <th>Estado</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (articulo of productos(); track articulo.id) {
+              <tr>
+                <td class="nowrap">
+                  <span class="sku-pill">{{ articulo.codigo }}</span>
+                </td>
+
+                <td>
+                  <div class="cell-title">{{ articulo.nombre }}</div>
+                  @if (articulo.marca_id || articulo.descripcion) {
+                    <div class="cell-sub">
+                      @if (articulo.marca_id) { {{ nombreMarca(articulo.marca_id) }} }
+                      @if (articulo.marca_id && articulo.descripcion) { · }
+                      {{ articulo.descripcion }}
+                    </div>
+                  }
+                </td>
+
+                <td class="nowrap">
+                  <span class="tipo-badge" [attr.data-tipo]="codigoTipo(articulo)">
+                    {{ nombreTipo(articulo) }}
+                  </span>
+                </td>
+
+                <td>{{ nombreCategoria(articulo.categoria_id) }}</td>
+                <td class="nowrap">{{ nombreUnidad(articulo.unidad_medida_id) }}</td>
+                <td class="nowrap">{{ nombreImpuesto(articulo.grupo_impuesto_id) }}</td>
+
+                <td>
+                  <span
+                    class="status-badge"
+                    [class.active]="articulo.estado"
+                    [class.inactive]="!articulo.estado"
+                  >
+                    {{ articulo.estado ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="abrirEditar(articulo)">
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [class.success]="!articulo.estado"
+                      [class.warning]="articulo.estado"
+                      (click)="toggleActivo(articulo)"
+                    >
+                      {{ articulo.estado ? 'Desactivar' : 'Activar' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon danger"
+                      (click)="solicitarEliminar(articulo)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPaginas() > 1) {
+        <footer class="pagination">
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() <= 1"
+            (click)="irAPagina(page() - 1)"
+          >
+            ← Anterior
+          </button>
+          <span class="page-info">Página {{ page() }} de {{ totalPaginas() }}</span>
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() >= totalPaginas()"
+            (click)="irAPagina(page() + 1)"
+          >
+            Siguiente →
+          </button>
+        </footer>
+      }
+    }
+  </section>
+</section>
+
+<!-- Modal Crear / Editar Artículo -->
+@if (modalAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModal()">
+    <div
+      class="modal-card"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="editando() ? 'Editar artículo' : 'Nuevo artículo'"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>{{ editando() ? 'Editar artículo' : 'Nuevo artículo' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModal()" aria-label="Cerrar">×</button>
+      </header>
+
+      <form [formGroup]="form" (ngSubmit)="guardar()" class="modal-form">
+        @if (modalError(); as merr) {
+          <div class="alert error" role="alert">{{ merr }}</div>
+        }
+
+        @if (categorias().length === 0) {
+          <div class="alert warning">
+            Debes crear al menos una categoría activa en <strong>Operación → Productos → Categorías</strong>.
+          </div>
+        }
+
+        @if (!editando()) {
+          <div class="tipo-picker" role="radiogroup" aria-label="Tipo de artículo">
+            <span class="tipo-picker-label">1. Selecciona el tipo de artículo *</span>
+            <div class="tipo-cards">
+              @for (t of tiposArticulo(); track t.id) {
+                <button
+                  type="button"
+                  class="tipo-card"
+                  [class.selected]="form.controls.tipo_articulo_id.value === t.id"
+                  (click)="seleccionarTipo(t.id)"
+                  [attr.aria-pressed]="form.controls.tipo_articulo_id.value === t.id"
+                >
+                  <span class="tipo-card-title">{{ t.nombre }}</span>
+                  <span class="tipo-card-desc">
+                    @if (t.codigo === 'PRODUCTO') {
+                      Artículo físico con inventario, compra y venta
+                    } @else {
+                      Servicio por hora, proyecto, unidad o suscripción
+                    }
+                  </span>
+                </button>
+              }
+            </div>
+          </div>
+        } @else {
+          <div class="tipo-readonly">
+            <span>Tipo de artículo:</span>
+            <span class="tipo-badge" [attr.data-tipo]="tipoSeleccionadoCodigo()">
+              {{ nombreTipo(editando()!) }}
+            </span>
+          </div>
+        }
+
+        @if (!tipoSeleccionadoCodigo()) {
+          <div class="tipo-placeholder">
+            Elige <strong>Producto</strong> o <strong>Servicio</strong> arriba para desplegar los campos correspondientes.
+          </div>
+        } @else {
+          <div class="form-grid">
+            <label class="field">
+              <span>Código interno *</span>
+              <input
+                type="text"
+                formControlName="codigo"
+                [placeholder]="tipoSeleccionadoCodigo() === 'SERVICIO' ? 'Ej. SERV-001' : 'Ej. PROD-001'"
+              />
+              @if (form.controls.codigo.touched && form.controls.codigo.invalid) {
+                <small class="field-error">El código es obligatorio.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Nombre comercial *</span>
+              <input
+                type="text"
+                formControlName="nombre"
+                [placeholder]="
+                  tipoSeleccionadoCodigo() === 'SERVICIO'
+                    ? 'Ej. Consultoría técnica'
+                    : 'Ej. Laptop Pro 14'
+                "
+              />
+              @if (form.controls.nombre.touched && form.controls.nombre.invalid) {
+                <small class="field-error">El nombre es obligatorio.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Unidad de medida *</span>
+              <select formControlName="unidad_medida_id">
+                <option [ngValue]="null" disabled>Selecciona una unidad</option>
+                @for (u of unidades(); track u.id) {
+                  <option [ngValue]="u.id">
+                    {{ u.nombre }}@if (u.descripcion) { — {{ u.descripcion }} }
+                  </option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Categoría *</span>
+              <select formControlName="categoria_id">
+                <option [ngValue]="null" disabled>Selecciona una categoría</option>
+                @for (cat of categorias(); track cat.id) {
+                  <option [ngValue]="cat.id">{{ cat.nombre }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Grupo de impuestos *</span>
+              <select formControlName="grupo_impuesto_id">
+                <option [ngValue]="null" disabled>Selecciona un impuesto</option>
+                @for (g of gruposImpuesto(); track g.id) {
+                  <option [ngValue]="g.id">{{ g.nombre }} ({{ g.tarifa }}%)</option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Marca (opcional)</span>
+              <select formControlName="marca_id">
+                <option [ngValue]="null">Sin marca</option>
+                @for (m of marcas(); track m.id) {
+                  <option [ngValue]="m.id">{{ m.nombre }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="field full">
+              <span>Descripción</span>
+              <textarea rows="2" formControlName="descripcion" placeholder="Detalles del artículo..."></textarea>
+            </label>
+          </div>
+
+          <!-- Extensión: Producto físico -->
+          @if (tipoSeleccionadoCodigo() === 'PRODUCTO') {
+            <div class="subtipo-box">
+              <div class="subtipo-title">Configuración de producto físico</div>
+              <div class="checks-row">
+                <label class="checkbox-field">
+                  <input type="checkbox" formControlName="control_inventario" />
+                  <span>Controla inventario</span>
+                </label>
+                <label class="checkbox-field">
+                  <input type="checkbox" formControlName="permite_compra" />
+                  <span>Permite compra</span>
+                </label>
+                <label class="checkbox-field">
+                  <input type="checkbox" formControlName="permite_venta" />
+                  <span>Permite venta</span>
+                </label>
+              </div>
+              @if (form.controls.control_inventario.value) {
+                <label class="field">
+                  <span>Método de valoración *</span>
+                  <select formControlName="metodo_valoracion_id">
+                    <option [ngValue]="null" disabled>Selecciona un método</option>
+                    @for (mv of metodosValoracion(); track mv.id) {
+                      <option [ngValue]="mv.id">{{ mv.nombre }}</option>
+                    }
+                  </select>
+                </label>
+              }
+            </div>
+          }
+
+          <!-- Extensión: Servicio -->
+          @if (tipoSeleccionadoCodigo() === 'SERVICIO') {
+            <div class="subtipo-box">
+              <div class="subtipo-title">Configuración de servicio</div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Modalidad *</span>
+                  <select formControlName="modalidad_id">
+                    <option [ngValue]="null" disabled>Selecciona una modalidad</option>
+                    @for (mod of modalidadesServicio(); track mod.id) {
+                      <option [ngValue]="mod.id">{{ mod.nombre }}</option>
+                    }
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Duración estimada (horas)</span>
+                  <input
+                    type="number"
+                    min="0.25"
+                    step="0.25"
+                    formControlName="duracion_estimada"
+                    placeholder="Ej. 1.5"
+                  />
+                </label>
+              </div>
+              <div class="checks-row">
+                <label class="checkbox-field">
+                  <input type="checkbox" formControlName="requiere_programacion" />
+                  <span>Requiere programación / agenda</span>
+                </label>
+                <label class="checkbox-field">
+                  <input type="checkbox" formControlName="control_consumos" />
+                  <span>Control de consumos / materiales</span>
+                </label>
+              </div>
+            </div>
+          }
+
+          <label class="checkbox-field">
+            <input type="checkbox" formControlName="estado" />
+            <span>Artículo activo</span>
+          </label>
+        }
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModal()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="btn-primary"
+            [disabled]="saving() || !tipoSeleccionadoCodigo()"
+          >
+            @if (saving()) {
+              Guardando...
+            } @else if (editando()) {
+              Guardar cambios
+            } @else if (tipoSeleccionadoCodigo() === 'SERVICIO') {
+              Crear servicio
+            } @else if (tipoSeleccionadoCodigo() === 'PRODUCTO') {
+              Crear producto
+            } @else {
+              Crear artículo
+            }
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminación (Soft Delete) -->
+@if (aEliminar(); as articulo) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div
+      class="modal-card confirm-card"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirmar eliminación"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>Eliminar artículo</h2>
+        <button type="button" class="btn-close" (click)="cancelarEliminar()" aria-label="Cerrar">
+          ×
+        </button>
+      </header>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar <strong>{{ articulo.nombre }}</strong>
+        (<code>{{ articulo.codigo }}</code>)? Se aplicará eliminación lógica (soft delete).
+      </p>
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="cancelarEliminar()" [disabled]="saving()">
+          Cancelar
+        </button>
+        <button type="button" class="btn-danger" (click)="confirmarEliminar()" [disabled]="saving()">
+          {{ saving() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+}

@@ -50,4 +50,25 @@ describe('MainLayoutComponent', () => {
     fixture.detectChanges();
     expect(el.querySelectorAll('.nav-subitem').length).toBe(0);
   });
+
+  it('debe desplegar el submenú de Productos con Catálogo y Categorías activos y Configuración en Pronto', () => {
+    const fixture = TestBed.createComponent(MainLayoutComponent);
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const prodButton = Array.from(el.querySelectorAll<HTMLButtonElement>('button.nav-toggle')).find(
+      (btn) => btn.textContent?.includes('Productos'),
+    );
+
+    expect(prodButton).toBeTruthy();
+    prodButton!.click();
+    fixture.detectChanges();
+
+    const subitems = Array.from(el.querySelectorAll<HTMLElement>('.nav-subitem')).map((node) =>
+      node.querySelector('.subitem-label')?.textContent?.trim(),
+    );
+    expect(subitems).toEqual(['Catálogo', 'Categorías', 'Configuración']);
+    expect(el.querySelectorAll('a.nav-subitem').length).toBe(2);
+    expect(el.querySelectorAll('.nav-subitem.disabled').length).toBe(1);
+  });
 });

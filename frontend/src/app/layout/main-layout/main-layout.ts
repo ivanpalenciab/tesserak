@@ -80,6 +80,15 @@ export class MainLayoutComponent {
       title: 'Operación',
       items: [
         { label: 'Terceros', icon: 'contacts', disabled: true, badge: 'Pronto' },
+        {
+          label: 'Productos',
+          icon: 'products',
+          children: [
+            { label: 'Catálogo', route: '/productos/catalogo' },
+            { label: 'Categorías', route: '/productos/categorias' },
+            { label: 'Configuración', disabled: true, badge: 'Pronto' },
+          ],
+        },
         { label: 'Inventario', icon: 'inventory', disabled: true, badge: 'Pronto' },
       ],
     },
