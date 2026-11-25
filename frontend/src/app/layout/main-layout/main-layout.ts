@@ -86,7 +86,7 @@ export class MainLayoutComponent {
           children: [
             { label: 'Catálogo', route: '/productos/catalogo' },
             { label: 'Categorías', route: '/productos/categorias' },
-            { label: 'Configuración', disabled: true, badge: 'Pronto' },
+            { label: 'Configuración', route: '/productos/configuracion' },
           ],
         },
         { label: 'Inventario', icon: 'inventory', disabled: true, badge: 'Pronto' },

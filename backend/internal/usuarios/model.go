@@ -13,6 +13,7 @@ import (
 // FK compuestas que GORM no genera correctamente.
 type Usuario struct {
 	ID            int64          `gorm:"column:id;primaryKey"`
+	Key           string         `gorm:"column:key;type:uuid;not null;default:gen_random_uuid()"`
 	EmpresaID     int32          `gorm:"column:empresa_id;not null"`
 	SucursalID    int32          `gorm:"column:sucursal_id;not null"`
 	NombreUsuario string         `gorm:"column:nombre_usuario;not null"`

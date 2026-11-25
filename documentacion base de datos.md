@@ -83,7 +83,7 @@ erDiagram
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
-| `usuarios` | Implementada (`000001`) | Credenciales y perfil de acceso. Cada usuario pertenece a una sucursal y empresa (`FK (sucursal_id, empresa_id)`). Email y `nombre_usuario` son únicos por empresa (insensibles a mayúsculas) entre usuarios no borrados. Contraseña con `bcrypt`. | **Multi-tenant con FK compuesta + Soft Delete + Índice único parcial**. |
+| `usuarios` | Implementada (`000001`, `000010`) | Credenciales y perfil de acceso. Incluye identificador externo único `key` (`UUID v4`, `DEFAULT gen_random_uuid()`, índice `ux_usuarios_key`). Cada usuario pertenece a una sucursal y empresa (`FK (sucursal_id, empresa_id)`). Email y `nombre_usuario` son únicos por empresa (insensibles a mayúsculas) entre usuarios no borrados. Contraseña con `bcrypt`. | **Multi-tenant con FK compuesta + UUID v4 público + Soft Delete + Índice único parcial**. |
 | `roles_sistema` | Diseñada | Define roles de acceso al sistema (ej. Administrador, Vendedor, Cajero). | **RBAC (Role)**. |
 | `permisos` | Diseñada | Define permisos granulares de acciones en el sistema. | **RBAC (Permission)**. |
 | `usuario_roles` | Diseñada | Asigna uno o varios roles del sistema a cada usuario. | **Tabla puente N:M (RBAC)**. |

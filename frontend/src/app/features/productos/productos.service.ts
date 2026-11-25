@@ -5,9 +5,13 @@ import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ActualizarCategoriaRequest,
+  ActualizarGrupoImpuestoRequest,
+  ActualizarMarcaRequest,
   ActualizarProductoRequest,
   CategoriaProducto,
   CrearCategoriaRequest,
+  CrearGrupoImpuestoRequest,
+  CrearMarcaRequest,
   CrearProductoRequest,
   GrupoImpuesto,
   ListaProductosResponse,
@@ -51,12 +55,28 @@ export class ProductosService {
       .pipe(map((r) => r.data ?? []));
   }
 
-  listarGruposImpuesto(soloActivos?: boolean): Observable<GrupoImpuesto[]> {
+  listarGruposImpuesto(soloActivos?: boolean, q?: string): Observable<GrupoImpuesto[]> {
     let params = new HttpParams();
     if (soloActivos !== undefined) params = params.set('activo', String(soloActivos));
+    if (q?.trim()) params = params.set('q', q.trim());
     return this.http
       .get<CatalogoListResponse<GrupoImpuesto>>(`${this.api}/grupos-impuesto`, { params })
       .pipe(map((r) => r.data ?? []));
+  }
+
+  crearGrupoImpuesto(payload: CrearGrupoImpuestoRequest): Observable<GrupoImpuesto> {
+    return this.http.post<GrupoImpuesto>(`${this.api}/grupos-impuesto`, payload);
+  }
+
+  actualizarGrupoImpuesto(
+    id: number,
+    payload: ActualizarGrupoImpuestoRequest,
+  ): Observable<GrupoImpuesto> {
+    return this.http.patch<GrupoImpuesto>(`${this.api}/grupos-impuesto/${id}`, payload);
+  }
+
+  eliminarGrupoImpuesto(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.api}/grupos-impuesto/${id}`);
   }
 
   listarUnidadesMedida(): Observable<UnidadMedida[]> {
@@ -65,12 +85,25 @@ export class ProductosService {
       .pipe(map((r) => r.data ?? []));
   }
 
-  listarMarcas(soloActivas?: boolean): Observable<MarcaProducto[]> {
+  listarMarcas(soloActivas?: boolean, q?: string): Observable<MarcaProducto[]> {
     let params = new HttpParams();
     if (soloActivas !== undefined) params = params.set('activo', String(soloActivas));
+    if (q?.trim()) params = params.set('q', q.trim());
     return this.http
       .get<CatalogoListResponse<MarcaProducto>>(`${this.api}/marcas`, { params })
       .pipe(map((r) => r.data ?? []));
+  }
+
+  crearMarca(payload: CrearMarcaRequest): Observable<MarcaProducto> {
+    return this.http.post<MarcaProducto>(`${this.api}/marcas`, payload);
+  }
+
+  actualizarMarca(id: number, payload: ActualizarMarcaRequest): Observable<MarcaProducto> {
+    return this.http.patch<MarcaProducto>(`${this.api}/marcas/${id}`, payload);
+  }
+
+  eliminarMarca(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.api}/marcas/${id}`);
   }
 
   // =====================================================================

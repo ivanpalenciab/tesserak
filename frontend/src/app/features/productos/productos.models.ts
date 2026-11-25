@@ -24,6 +24,30 @@ export interface GrupoImpuesto {
   nombre: string;
   tarifa: number;
   activo: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CrearGrupoImpuestoRequest {
+  nombre: string;
+  tarifa: number;
+  activo?: boolean;
+}
+
+export interface ActualizarGrupoImpuestoRequest {
+  nombre?: string;
+  tarifa?: number;
+  activo?: boolean;
+}
+
+export interface CrearMarcaRequest {
+  nombre: string;
+  activo?: boolean;
+}
+
+export interface ActualizarMarcaRequest {
+  nombre?: string;
+  activo?: boolean;
 }
 
 export interface UnidadMedida {

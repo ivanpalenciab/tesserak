@@ -178,6 +178,7 @@ Las migraciones están en `backend/migrations/`, se embeben en el binario median
 | `000007` | Oportunidades comerciales | Renombra a `crm_estado_oportunidades` y crea `crm_oportunidades` |
 | `000008` | Catálogos de productos por empresa | `unidades_medida`, `categorias_producto`, `marcas`, `grupos_impuesto`, `productos` |
 | `000009` | Supertipo–Subtipo de artículos | `tipos_articulo`, `metodos_valoracion`, `modalidades_servicio`, `articulos` → `productos` (1:1) / `servicios` (1:1, duración en horas), `grupo_impuesto_id` obligatorio y `marca_id` opcional |
+| `000010` | Clave pública UUID v4 en usuarios | Agrega columna `key UUID NOT NULL DEFAULT gen_random_uuid()` con índice único `ux_usuarios_key` en `usuarios` |
 
 El diagrama relacional completo y actualizado está en [tesserak_modelo_corregido.drawio](tesserak_modelo_corregido.drawio) (editable en [diagrams.net](https://app.diagrams.net/)) y la documentación detallada de convenciones de BD en [documentacion base de datos.md](documentacion%20base%20de%20datos.md).
 

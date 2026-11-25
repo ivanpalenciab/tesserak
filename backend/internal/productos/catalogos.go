@@ -15,12 +15,15 @@ import (
 )
 
 var (
-	errCategoriaNotFound = errors.New("categoría no encontrada")
-	errMarcaNotFound     = errors.New("marca no encontrada")
+	errCategoriaNotFound     = errors.New("categoría no encontrada")
+	errMarcaNotFound         = errors.New("marca no encontrada")
+	errGrupoImpuestoNotFound = errors.New("grupo de impuesto no encontrado")
 
-	ErrCategoriaNoEncontrada = httpx.NewError(http.StatusNotFound, "categoria_no_encontrada", "la categoría de producto no existe")
-	ErrMarcaNoEncontrada     = httpx.NewError(http.StatusNotFound, "marca_no_encontrada", "la marca no existe")
-	ErrNombreDuplicado       = httpx.NewError(http.StatusConflict, "nombre_duplicado", "ya existe un registro activo con ese nombre en la empresa")
+	ErrCategoriaNoEncontrada     = httpx.NewError(http.StatusNotFound, "categoria_no_encontrada", "la categoría de producto no existe")
+	ErrMarcaNoEncontrada         = httpx.NewError(http.StatusNotFound, "marca_no_encontrada", "la marca no existe")
+	ErrGrupoImpuestoNoEncontrado = httpx.NewError(http.StatusNotFound, "grupo_impuesto_no_encontrado", "el grupo de impuesto no existe")
+	ErrTarifaInvalida            = httpx.NewError(http.StatusBadRequest, "tarifa_invalida", "la tarifa debe estar entre 0 y 100")
+	ErrNombreDuplicado           = httpx.NewError(http.StatusConflict, "nombre_duplicado", "ya existe un registro activo con ese nombre en la empresa")
 )
 
 // =====================================================================
@@ -93,6 +96,28 @@ type CatalogoNombreResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type CrearGrupoImpuestoRequest struct {
+	Nombre string   `json:"nombre" binding:"required,min=1,max=100"`
+	Tarifa *float64 `json:"tarifa" binding:"required,gte=0,lte=100"`
+	Activo *bool    `json:"activo"`
+}
+
+type ActualizarGrupoImpuestoRequest struct {
+	Nombre *string  `json:"nombre" binding:"omitnil,min=1,max=100"`
+	Tarifa *float64 `json:"tarifa" binding:"omitnil,gte=0,lte=100"`
+	Activo *bool    `json:"activo"`
+}
+
+type GrupoImpuestoResponse struct {
+	ID        int32     `json:"id"`
+	EmpresaID int32     `json:"empresa_id"`
+	Nombre    string    `json:"nombre"`
+	Tarifa    float64   `json:"tarifa"`
+	Activo    bool      `json:"activo"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // =====================================================================
 // Repository
 // =====================================================================
@@ -121,14 +146,48 @@ func (r *Repository) ListModalidadesServicio(ctx context.Context) ([]ModalidadSe
 	return items, err
 }
 
-func (r *Repository) ListGruposImpuesto(ctx context.Context, empresaID int32, activo *bool) ([]GrupoImpuesto, error) {
+func (r *Repository) CreateGrupoImpuesto(ctx context.Context, g *GrupoImpuesto) error {
+	return r.db.WithContext(ctx).Create(g).Error
+}
+
+func (r *Repository) ListGruposImpuesto(ctx context.Context, empresaID int32, f ListarCatalogoQuery) ([]GrupoImpuesto, error) {
 	q := r.db.WithContext(ctx).Where("empresa_id = ?", empresaID)
-	if activo != nil {
-		q = q.Where("activo = ?", *activo)
+	if f.Activo != nil {
+		q = q.Where("activo = ?", *f.Activo)
+	}
+	if s := strings.TrimSpace(f.Q); s != "" {
+		q = q.Where("nombre ILIKE ?", "%"+escapeLike(s)+"%")
 	}
 	var items []GrupoImpuesto
 	err := q.Order("tarifa ASC, nombre ASC").Find(&items).Error
 	return items, err
+}
+
+func (r *Repository) FindGrupoImpuestoByID(ctx context.Context, empresaID, id int32) (*GrupoImpuesto, error) {
+	var g GrupoImpuesto
+	err := r.db.WithContext(ctx).Where("empresa_id = ? AND id = ?", empresaID, id).First(&g).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errGrupoImpuestoNotFound
+	}
+	return &g, err
+}
+
+func (r *Repository) UpdateGrupoImpuesto(ctx context.Context, g *GrupoImpuesto, cambios map[string]any) error {
+	if len(cambios) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(g).Updates(cambios).Error
+}
+
+func (r *Repository) SoftDeleteGrupoImpuesto(ctx context.Context, empresaID, id int32) error {
+	res := r.db.WithContext(ctx).Where("empresa_id = ? AND id = ?", empresaID, id).Delete(&GrupoImpuesto{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errGrupoImpuestoNotFound
+	}
+	return nil
 }
 
 func (r *Repository) CreateCategoria(ctx context.Context, c *CategoriaProducto) error {
@@ -368,6 +427,88 @@ func (s *Service) EliminarMarca(ctx context.Context, empresaID, id int32) error 
 	return mapCatalogoError(s.repo.SoftDeleteMarca(ctx, empresaID, id))
 }
 
+func (s *Service) CrearGrupoImpuesto(ctx context.Context, empresaID int32, req CrearGrupoImpuestoRequest) (*GrupoImpuestoResponse, error) {
+	if req.Tarifa == nil || *req.Tarifa < 0 || *req.Tarifa > 100 {
+		return nil, ErrTarifaInvalida
+	}
+	activo := true
+	if req.Activo != nil {
+		activo = *req.Activo
+	}
+	g := &GrupoImpuesto{
+		EmpresaID: empresaID,
+		Nombre:    strings.TrimSpace(req.Nombre),
+		Tarifa:    *req.Tarifa,
+		Activo:    activo,
+	}
+	if err := s.repo.CreateGrupoImpuesto(ctx, g); err != nil {
+		return nil, mapCatalogoError(err)
+	}
+	resp := toGrupoImpuestoResponse(g)
+	return &resp, nil
+}
+
+func (s *Service) ListarGruposImpuesto(ctx context.Context, empresaID int32, q ListarCatalogoQuery) ([]GrupoImpuestoResponse, error) {
+	items, err := s.repo.ListGruposImpuesto(ctx, empresaID, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]GrupoImpuestoResponse, 0, len(items))
+	for i := range items {
+		out = append(out, toGrupoImpuestoResponse(&items[i]))
+	}
+	return out, nil
+}
+
+func (s *Service) ActualizarGrupoImpuesto(ctx context.Context, empresaID, id int32, req ActualizarGrupoImpuestoRequest) (*GrupoImpuestoResponse, error) {
+	if req.Tarifa != nil && (*req.Tarifa < 0 || *req.Tarifa > 100) {
+		return nil, ErrTarifaInvalida
+	}
+	var res *GrupoImpuesto
+	err := s.repo.WithTx(ctx, func(tx *Repository) error {
+		g, err := tx.FindGrupoImpuestoByID(ctx, empresaID, id)
+		if err != nil {
+			return err
+		}
+		cambios := map[string]any{}
+		if req.Nombre != nil {
+			cambios["nombre"] = strings.TrimSpace(*req.Nombre)
+		}
+		if req.Tarifa != nil {
+			cambios["tarifa"] = *req.Tarifa
+		}
+		if req.Activo != nil {
+			cambios["activo"] = *req.Activo
+		}
+		if err := tx.UpdateGrupoImpuesto(ctx, g, cambios); err != nil {
+			return err
+		}
+		res, err = tx.FindGrupoImpuestoByID(ctx, empresaID, id)
+		return err
+	})
+	if err != nil {
+		return nil, mapCatalogoError(err)
+	}
+	resp := toGrupoImpuestoResponse(res)
+	return &resp, nil
+}
+
+func (s *Service) EliminarGrupoImpuesto(ctx context.Context, empresaID, id int32) error {
+	return mapCatalogoError(s.repo.SoftDeleteGrupoImpuesto(ctx, empresaID, id))
+}
+
+func toGrupoImpuestoResponse(g *GrupoImpuesto) GrupoImpuestoResponse {
+	return GrupoImpuestoResponse{
+		ID:        g.ID,
+		EmpresaID: g.EmpresaID,
+		Nombre:    g.Nombre,
+		Tarifa:    g.Tarifa,
+		Activo:    g.Activo,
+		CreatedAt: g.CreatedAt,
+		UpdatedAt: g.UpdatedAt,
+	}
+}
+
 func toCategoriaResponse(c *CategoriaProducto) CatalogoNombreResponse {
 	return CatalogoNombreResponse{
 		ID:        c.ID,
@@ -400,6 +541,9 @@ func mapCatalogoError(err error) error {
 	if errors.Is(err, errMarcaNotFound) {
 		return ErrMarcaNoEncontrada
 	}
+	if errors.Is(err, errGrupoImpuestoNotFound) {
+		return ErrGrupoImpuestoNoEncontrado
+	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return ErrNombreDuplicado
@@ -416,7 +560,12 @@ func (h *Handler) registerCatalogoRoutes(g *gin.RouterGroup) {
 	g.GET("/tipos-articulo", h.listarTiposArticulo)
 	g.GET("/metodos-valoracion", h.listarMetodosValoracion)
 	g.GET("/modalidades-servicio", h.listarModalidadesServicio)
-	g.GET("/grupos-impuesto", h.listarGruposImpuesto)
+
+	imp := g.Group("/grupos-impuesto")
+	imp.POST("", h.crearGrupoImpuesto)
+	imp.GET("", h.listarGruposImpuesto)
+	imp.PATCH("/:id", h.actualizarGrupoImpuesto)
+	imp.DELETE("/:id", h.eliminarGrupoImpuesto)
 
 	cats := g.Group("/categorias")
 	cats.POST("", h.crearCategoria)
@@ -492,6 +641,24 @@ func (h *Handler) listarModalidadesServicio(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": out})
 }
 
+func (h *Handler) crearGrupoImpuesto(c *gin.Context) {
+	claims, ok := requireClaims(c)
+	if !ok {
+		return
+	}
+	var req CrearGrupoImpuestoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondError(c, httpx.BindError(err))
+		return
+	}
+	resp, err := h.svc.CrearGrupoImpuesto(c.Request.Context(), claims.EmpresaID, req)
+	if err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, resp)
+}
+
 func (h *Handler) listarGruposImpuesto(c *gin.Context) {
 	claims, ok := requireClaims(c)
 	if !ok {
@@ -502,19 +669,52 @@ func (h *Handler) listarGruposImpuesto(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
-	items, err := h.svc.repo.ListGruposImpuesto(c.Request.Context(), claims.EmpresaID, q.Activo)
+	resp, err := h.svc.ListarGruposImpuesto(c.Request.Context(), claims.EmpresaID, q)
 	if err != nil {
 		httpx.RespondError(c, err)
 		return
 	}
-	out := make([]gin.H, 0, len(items))
-	for _, it := range items {
-		out = append(out, gin.H{
-			"id": it.ID, "empresa_id": it.EmpresaID, "nombre": it.Nombre,
-			"tarifa": it.Tarifa, "activo": it.Activo,
-		})
+	c.JSON(http.StatusOK, gin.H{"data": resp})
+}
+
+func (h *Handler) actualizarGrupoImpuesto(c *gin.Context) {
+	claims, ok := requireClaims(c)
+	if !ok {
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": out})
+	id, err := parseID32(c, "id")
+	if err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	var req ActualizarGrupoImpuestoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondError(c, httpx.BindError(err))
+		return
+	}
+	resp, err := h.svc.ActualizarGrupoImpuesto(c.Request.Context(), claims.EmpresaID, id, req)
+	if err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) eliminarGrupoImpuesto(c *gin.Context) {
+	claims, ok := requireClaims(c)
+	if !ok {
+		return
+	}
+	id, err := parseID32(c, "id")
+	if err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	if err := h.svc.EliminarGrupoImpuesto(c.Request.Context(), claims.EmpresaID, id); err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) crearCategoria(c *gin.Context) {

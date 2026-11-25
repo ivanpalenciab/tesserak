@@ -2,7 +2,9 @@ package usuarios
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -49,7 +51,13 @@ func (s *Service) Crear(ctx context.Context, req CrearUsuarioRequest) (*UsuarioR
 		activo = *req.Activo
 	}
 
+	key, err := newUUIDv4()
+	if err != nil {
+		return nil, err
+	}
+
 	u := &Usuario{
+		Key:           key,
 		EmpresaID:     empresaID,
 		SucursalID:    req.SucursalID,
 		NombreUsuario: strings.TrimSpace(req.NombreUsuario),
@@ -175,6 +183,18 @@ func hashPassword(p string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// newUUIDv4 genera un UUID v4 estándar (RFC 4122) usando crypto/rand.
+func newUUIDv4() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // versión 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variante RFC 4122
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 // mapError convierte errores de repositorio/PostgreSQL en errores HTTP de dominio.

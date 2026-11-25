@@ -6,6 +6,7 @@ export interface LoginRequest {
 
 export interface UsuarioAutenticado {
   id: number;
+  key?: string;
   empresa_id: number;
   sucursal_id: number;
   nombre_usuario: string;

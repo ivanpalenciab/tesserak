@@ -124,6 +124,14 @@ export const routes: Routes = [
             title: 'Categorías de productos — Tesserak',
           },
           {
+            path: 'configuracion',
+            loadComponent: () =>
+              import('./features/productos/configuracion/configuracion').then(
+                (m) => m.ProductosConfiguracionComponent,
+              ),
+            title: 'Configuración de productos — Tesserak',
+          },
+          {
             path: '',
             pathMatch: 'full',
             redirectTo: 'catalogo',

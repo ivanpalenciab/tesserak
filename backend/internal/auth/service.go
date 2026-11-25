@@ -33,6 +33,7 @@ type LoginRequest struct {
 
 type UsuarioAutenticado struct {
 	ID            int64  `json:"id"`
+	Key           string `json:"key"`
 	EmpresaID     int32  `json:"empresa_id"`
 	SucursalID    int32  `json:"sucursal_id"`
 	NombreUsuario string `json:"nombre_usuario"`
@@ -117,6 +118,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		ExpiresIn:   int64(tokenTTL.Seconds()),
 		Usuario: UsuarioAutenticado{
 			ID:            u.ID,
+			Key:           u.Key,
 			EmpresaID:     u.EmpresaID,
 			SucursalID:    u.SucursalID,
 			NombreUsuario: u.NombreUsuario,

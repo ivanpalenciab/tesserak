@@ -39,6 +39,7 @@ type ListarUsuariosQuery struct {
 // UsuarioResponse es la representación pública de un usuario (sin password_hash).
 type UsuarioResponse struct {
 	ID            int64      `json:"id"`
+	Key           string     `json:"key"`
 	EmpresaID     int32      `json:"empresa_id"`
 	SucursalID    int32      `json:"sucursal_id"`
 	NombreUsuario string     `json:"nombre_usuario"`
@@ -61,6 +62,7 @@ type ListaUsuariosResponse struct {
 func toResponse(u *Usuario) UsuarioResponse {
 	return UsuarioResponse{
 		ID:            u.ID,
+		Key:           u.Key,
 		EmpresaID:     u.EmpresaID,
 		SucursalID:    u.SucursalID,
 		NombreUsuario: u.NombreUsuario,

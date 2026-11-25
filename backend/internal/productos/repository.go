@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var errNotFound = errors.New("artículo no encontrado")
@@ -34,7 +35,7 @@ func (r *Repository) FindTipoArticuloByID(ctx context.Context, id int32) (*TipoA
 }
 
 func (r *Repository) CreateArticulo(ctx context.Context, a *Articulo) error {
-	return r.db.WithContext(ctx).Create(a).Error
+	return r.db.WithContext(ctx).Omit(clause.Associations).Create(a).Error
 }
 
 func (r *Repository) CreateProductoExt(ctx context.Context, ext *ProductoExtension) error {
@@ -102,7 +103,10 @@ func (r *Repository) UpdateArticulo(ctx context.Context, a *Articulo, cambios ma
 	if len(cambios) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(a).Updates(cambios).Error
+	return r.db.WithContext(ctx).
+		Model(&Articulo{}).
+		Where("empresa_id = ? AND id = ?", a.EmpresaID, a.ID).
+		Updates(cambios).Error
 }
 
 func (r *Repository) UpdateProductoExt(ctx context.Context, articuloID int32, cambios map[string]any) error {

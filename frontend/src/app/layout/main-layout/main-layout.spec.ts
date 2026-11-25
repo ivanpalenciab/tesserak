@@ -51,7 +51,7 @@ describe('MainLayoutComponent', () => {
     expect(el.querySelectorAll('.nav-subitem').length).toBe(0);
   });
 
-  it('debe desplegar el submenú de Productos con Catálogo y Categorías activos y Configuración en Pronto', () => {
+  it('debe desplegar el submenú de Productos con Catálogo, Categorías y Configuración activos', () => {
     const fixture = TestBed.createComponent(MainLayoutComponent);
     fixture.detectChanges();
 
@@ -68,7 +68,7 @@ describe('MainLayoutComponent', () => {
       node.querySelector('.subitem-label')?.textContent?.trim(),
     );
     expect(subitems).toEqual(['Catálogo', 'Categorías', 'Configuración']);
-    expect(el.querySelectorAll('a.nav-subitem').length).toBe(2);
-    expect(el.querySelectorAll('.nav-subitem.disabled').length).toBe(1);
+    expect(el.querySelectorAll('a.nav-subitem').length).toBe(3);
+    expect(el.querySelectorAll('.nav-subitem.disabled').length).toBe(0);
   });
 });
