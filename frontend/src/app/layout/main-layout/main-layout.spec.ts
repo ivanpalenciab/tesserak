@@ -67,8 +67,8 @@ describe('MainLayoutComponent', () => {
     const subitems = Array.from(el.querySelectorAll<HTMLElement>('.nav-subitem')).map((node) =>
       node.querySelector('.subitem-label')?.textContent?.trim(),
     );
-    expect(subitems).toEqual(['Catálogo', 'Categorías', 'Configuración']);
-    expect(el.querySelectorAll('a.nav-subitem').length).toBe(3);
+    expect(subitems).toEqual(['Catálogo', 'Categorías', 'Listas de precios', 'Configuración']);
+    expect(el.querySelectorAll('a.nav-subitem').length).toBe(4);
     expect(el.querySelectorAll('.nav-subitem.disabled').length).toBe(0);
   });
 });

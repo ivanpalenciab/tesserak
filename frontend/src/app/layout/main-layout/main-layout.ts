@@ -86,6 +86,7 @@ export class MainLayoutComponent {
           children: [
             { label: 'Catálogo', route: '/productos/catalogo' },
             { label: 'Categorías', route: '/productos/categorias' },
+            { label: 'Listas de precios', route: '/productos/listas-precios' },
             { label: 'Configuración', route: '/productos/configuracion' },
           ],
         },
