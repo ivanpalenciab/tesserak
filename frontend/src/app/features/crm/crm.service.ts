@@ -10,10 +10,12 @@ import {
   ActualizarGastoCampanaRequest,
   ActualizarLeadRequest,
   ActualizarMotivoDescarteRequest,
+  ActualizarOportunidadRequest,
   ActualizarOrigenLeadRequest,
   ActualizarTipoCampanaRequest,
   AsociarLeadCampanaRequest,
   CambiarEstadoLeadRequest,
+  CambiarEstadoOportunidadRequest,
   Campana,
   CampanaAsociadaLead,
   ConvertirLeadRequest,
@@ -23,6 +25,7 @@ import {
   CrearGastoCampanaRequest,
   CrearLeadRequest,
   CrearMotivoDescarteRequest,
+  CrearOportunidadRequest,
   CrearOrigenLeadRequest,
   CrearTipoCampanaRequest,
   EstadoCampana,
@@ -35,9 +38,13 @@ import {
   ListaGastosCampanaResponse,
   ListaLeadsCampanaResponse,
   ListaLeadsResponse,
+  ListaOportunidadesResponse,
   ListarCampanasFiltros,
   ListarLeadsFiltros,
+  ListarOportunidadesFiltros,
+  Moneda,
   MotivoDescarteLead,
+  Oportunidad,
   OrigenLead,
   TipoCampana,
 } from './crm.models';
@@ -50,6 +57,12 @@ interface CatalogoResponse<T> {
 export class CrmService {
   private readonly http = inject(HttpClient);
   private readonly api = `${environment.apiUrl}/crm`;
+
+  listarMonedas(): Observable<Moneda[]> {
+    return this.http
+      .get<CatalogoResponse<Moneda>>(`${this.api}/monedas`)
+      .pipe(map((r) => r.data ?? []));
+  }
 
   listarOrigenes(empresaId: number, soloActivos?: boolean): Observable<OrigenLead[]> {
     let params = new HttpParams().set('empresa_id', String(empresaId));
@@ -292,5 +305,43 @@ export class CrmService {
 
   eliminarGastoCampana(id: number): Observable<void> {
     return this.http.delete<void>(`${this.api}/gastos/${id}`);
+  }
+
+  // =====================================================================
+  // Oportunidades
+  // =====================================================================
+
+  listarOportunidades(filtros: ListarOportunidadesFiltros): Observable<ListaOportunidadesResponse> {
+    let params = new HttpParams().set('empresa_id', String(filtros.empresa_id));
+    if (filtros.estado_oportunidad_id) {
+      params = params.set('estado_oportunidad_id', String(filtros.estado_oportunidad_id));
+    }
+    if (filtros.lead_id) params = params.set('lead_id', String(filtros.lead_id));
+    if (filtros.campana_id) params = params.set('campana_id', String(filtros.campana_id));
+    if (filtros.prioridad) params = params.set('prioridad', filtros.prioridad);
+    if (filtros.q?.trim()) params = params.set('q', filtros.q.trim());
+    if (filtros.page) params = params.set('page', String(filtros.page));
+    if (filtros.page_size) params = params.set('page_size', String(filtros.page_size));
+
+    return this.http.get<ListaOportunidadesResponse>(`${this.api}/oportunidades`, { params });
+  }
+
+  crearOportunidad(payload: CrearOportunidadRequest): Observable<Oportunidad> {
+    return this.http.post<Oportunidad>(`${this.api}/oportunidades`, payload);
+  }
+
+  actualizarOportunidad(id: number, payload: ActualizarOportunidadRequest): Observable<Oportunidad> {
+    return this.http.patch<Oportunidad>(`${this.api}/oportunidades/${id}`, payload);
+  }
+
+  cambiarEstadoOportunidad(
+    id: number,
+    payload: CambiarEstadoOportunidadRequest,
+  ): Observable<Oportunidad> {
+    return this.http.patch<Oportunidad>(`${this.api}/oportunidades/${id}/estado`, payload);
+  }
+
+  eliminarOportunidad(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.api}/oportunidades/${id}`);
   }
 }

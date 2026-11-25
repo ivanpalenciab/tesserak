@@ -188,7 +188,7 @@
                     @if (c.presupuesto !== null) {
                       <strong>{{ c.presupuesto | number: '1.2-2' }}</strong>
                       @if (c.moneda_id) {
-                        <div class="cell-sub">Moneda #{{ c.moneda_id }}</div>
+                        <div class="cell-sub">{{ etiquetaMoneda(c.moneda_id) }}</div>
                       }
                     } @else {
                       <span class="muted">—</span>
@@ -399,8 +399,15 @@
           </label>
 
           <label class="field">
-            <span>ID Moneda (requerido si hay presupuesto)</span>
-            <input type="number" min="1" formControlName="moneda_id" placeholder="Ej. 1" />
+            <span>Moneda (requerida si hay presupuesto)</span>
+            <select formControlName="moneda_id">
+              <option [ngValue]="null">Sin moneda</option>
+              @for (m of monedas(); track m.id) {
+                <option [ngValue]="m.id">
+                  {{ m.codigo_iso }} — {{ m.nombre_moneda }} ({{ m.simbolo }})
+                </option>
+              }
+            </select>
           </label>
 
           @if (!campanaEditando()) {
@@ -516,7 +523,7 @@
                   }
                 </strong>
                 <span class="kpi-meta">
-                  @if (camp.moneda_id) { Moneda #{{ camp.moneda_id }} } @else { Sin moneda }
+                  {{ etiquetaMoneda(camp.moneda_id) }}
                 </span>
               </article>
 
@@ -557,7 +564,7 @@
                 <div class="currency-chips">
                   @for (gm of indicadores()!.gastos_por_moneda; track gm.moneda_id) {
                     <span class="currency-chip">
-                      Moneda #{{ gm.moneda_id }}:
+                      {{ etiquetaMoneda(gm.moneda_id) }}:
                       <strong>{{ gm.total_gastado | number: '1.2-2' }}</strong>
                       ({{ gm.cantidad_gastos }} registros)
                     </span>
@@ -719,8 +726,15 @@
                   </label>
 
                   <label class="field">
-                    <span>ID Moneda *</span>
-                    <input type="number" min="1" formControlName="moneda_id" />
+                    <span>Moneda *</span>
+                    <select formControlName="moneda_id">
+                      <option [ngValue]="null" disabled>Selecciona una moneda</option>
+                      @for (m of monedas(); track m.id) {
+                        <option [ngValue]="m.id">
+                          {{ m.codigo_iso }} — {{ m.nombre_moneda }} ({{ m.simbolo }})
+                        </option>
+                      }
+                    </select>
                   </label>
 
                   <label class="field">
@@ -772,7 +786,7 @@
                         <td>{{ g.categoria_gasto || '—' }}</td>
                         <td class="num">
                           <strong>{{ g.valor | number: '1.2-2' }}</strong>
-                          <div class="cell-sub">Moneda #{{ g.moneda_id }}</div>
+                          <div class="cell-sub">{{ etiquetaMoneda(g.moneda_id) }}</div>
                         </td>
                         <td class="actions-col">
                           @if (camp.estado !== 'FINALIZADA') {

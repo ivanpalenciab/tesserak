@@ -30,6 +30,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 
 	// Control / Dashboard
 	g.GET("/resumen", h.resumen)
+	g.GET("/monedas", h.listarMonedas)
 
 	// Catálogos por empresa
 	origenes := g.Group("/origenes")
@@ -54,6 +55,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	motivos.DELETE("/:id", h.eliminarMotivo)
 
 	h.registerEtapaOportunidadRoutes(g)
+	h.registerOportunidadRoutes(g)
 
 	// Leads y acciones del pipeline
 	leads := g.Group("/leads")

@@ -34,7 +34,7 @@ type EtapaOportunidad struct {
 	DeletedAt       gorm.DeletedAt `gorm:"column:deleted_at;index"`
 }
 
-func (EtapaOportunidad) TableName() string { return "crm_etapa_oportunidad" }
+func (EtapaOportunidad) TableName() string { return "crm_estado_oportunidades" }
 
 type CrearEtapaOportunidadRequest struct {
 	EmpresaID       int32  `json:"empresa_id"       binding:"required,gt=0"`

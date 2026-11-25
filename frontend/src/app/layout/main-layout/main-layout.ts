@@ -7,7 +7,9 @@ import { AuthService } from '../../core/auth/auth.service';
 
 interface NavSubItem {
   label: string;
-  route: string;
+  route?: string;
+  badge?: string;
+  disabled?: boolean;
 }
 
 interface NavItem {
@@ -60,12 +62,12 @@ export class MainLayoutComponent {
           label: 'CRM',
           icon: 'crm',
           children: [
-            { label: 'Resumen comercial', route: '/crm/resumen' },
+            { label: 'Resumen comercial', disabled: true, badge: 'Pronto' },
             { label: 'Leads', route: '/crm/leads' },
-            { label: 'Empresas y contactos', route: '/crm/empresas-contactos' },
+            { label: 'Empresas y contactos', disabled: true, badge: 'Pronto' },
             { label: 'Oportunidades', route: '/crm/oportunidades' },
-            { label: 'Pipeline comercial', route: '/crm/pipeline' },
-            { label: 'Actividades', route: '/crm/actividades' },
+            { label: 'Pipeline comercial', disabled: true, badge: 'Pronto' },
+            { label: 'Actividades', disabled: true, badge: 'Pronto' },
             { label: 'Campañas', route: '/crm/campanas' },
             { label: 'Configuración', route: '/crm/configuracion' },
           ],
@@ -118,7 +120,7 @@ export class MainLayoutComponent {
   isGroupActive(item: NavItem): boolean {
     if (!item.children?.length) return false;
     const url = this.currentUrl();
-    return item.children.some((child) => url.startsWith(child.route));
+    return item.children.some((child) => !!child.route && url.startsWith(child.route));
   }
 
   toggleMobileMenu(): void {
@@ -136,7 +138,7 @@ export class MainLayoutComponent {
   private syncExpandedWithUrl(url: string): void {
     for (const section of this.navSections) {
       for (const item of section.items) {
-        if (item.children?.some((child) => url.startsWith(child.route))) {
+        if (item.children?.some((child) => !!child.route && url.startsWith(child.route))) {
           this.expandedMenus.update((state) =>
             state[item.label] ? state : { ...state, [item.label]: true },
           );

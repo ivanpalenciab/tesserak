@@ -63,6 +63,17 @@ func TestValidacionesCRM(t *testing.T) {
 		// Intereses
 		{"interes sin referencia", http.MethodPost, "/api/v1/crm/leads/1/intereses", `{"cantidad_estimada":2}`, 400, `"interes_sin_referencia"`},
 		{"interes cantidad <= 0", http.MethodPost, "/api/v1/crm/leads/1/intereses", `{"notas":"Plan pro","cantidad_estimada":0}`, 400, `"field":"cantidad_estimada"`},
+
+		// Oportunidades
+		{"oportunidad sin campos", http.MethodPost, "/api/v1/crm/oportunidades", `{}`, 400, `"validacion"`},
+		{"oportunidad prioridad inválida", http.MethodPost, "/api/v1/crm/oportunidades",
+			`{"empresa_id":1,"estado_oportunidad_id":1,"titulo":"Venta Enterprise","prioridad":"URGENTE","created_by":1}`, 400, `"field":"prioridad"`},
+		{"oportunidad valor negativo", http.MethodPost, "/api/v1/crm/oportunidades",
+			`{"empresa_id":1,"estado_oportunidad_id":1,"titulo":"Venta Enterprise","valor_estimado":-5,"created_by":1}`, 400, `"field":"valor_estimado"`},
+		{"oportunidad fecha_cierre_estimada inválida", http.MethodPost, "/api/v1/crm/oportunidades",
+			`{"empresa_id":1,"estado_oportunidad_id":1,"titulo":"Venta Enterprise","fecha_cierre_estimada":"30/11/2026","created_by":1}`, 400, `"fecha_invalida"`},
+		{"listar oportunidades sin empresa_id", http.MethodGet, "/api/v1/crm/oportunidades", ``, 400, `"field":"empresa_id"`},
+		{"cambiar estado oportunidad sin estado_oportunidad_id", http.MethodPatch, "/api/v1/crm/oportunidades/1/estado", `{}`, 400, `"field":"estado_oportunidad_id"`},
 	}
 
 	for _, tc := range casos {

@@ -54,14 +54,10 @@ export const routes: Routes = [
           {
             path: 'oportunidades',
             loadComponent: () =>
-              import('./features/crm/crm-seccion-vacia/crm-seccion-vacia').then(
-                (m) => m.CrmSeccionVaciaComponent,
+              import('./features/crm/oportunidades/oportunidades').then(
+                (m) => m.CrmOportunidadesComponent,
               ),
-            data: {
-              titulo: 'Oportunidades',
-              subtitulo: 'Espacio reservado para la administración de oportunidades comerciales.',
-            },
-            title: 'Oportunidades — CRM · Tesserak',
+            title: 'Administrar oportunidades — CRM · Tesserak',
           },
           {
             path: 'pipeline',
@@ -104,7 +100,7 @@ export const routes: Routes = [
           {
             path: '',
             pathMatch: 'full',
-            redirectTo: 'resumen',
+            redirectTo: 'leads',
           },
         ],
       },

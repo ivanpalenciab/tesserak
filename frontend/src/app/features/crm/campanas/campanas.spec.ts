@@ -46,6 +46,10 @@ describe('CrmCampanasComponent', () => {
       .expectOne(`${environment.apiUrl}/crm/origenes?empresa_id=1&activo=true`)
       .flush({ data: [{ id: 2, empresa_id: 1, nombre: 'Facebook', activo: true }] });
 
+    httpMock.expectOne(`${environment.apiUrl}/crm/monedas`).flush({
+      data: [{ id: 1, codigo_iso: 'USD', nombre_moneda: 'Dólar estadounidense', simbolo: '$' }],
+    });
+
     httpMock
       .expectOne(`${environment.apiUrl}/crm/leads?empresa_id=1&page=1&page_size=100`)
       .flush({ data: [], page: 1, page_size: 100, total: 0 });
@@ -92,6 +96,7 @@ describe('CrmCampanasComponent', () => {
     httpMock
       .expectOne(`${environment.apiUrl}/crm/origenes?empresa_id=1&activo=true`)
       .flush({ data: [] });
+    httpMock.expectOne(`${environment.apiUrl}/crm/monedas`).flush({ data: [] });
     httpMock
       .expectOne(`${environment.apiUrl}/crm/leads?empresa_id=1&page=1&page_size=100`)
       .flush({ data: [], page: 1, page_size: 100, total: 0 });

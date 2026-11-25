@@ -18,6 +18,7 @@ import {
   IndicadoresCampana,
   Lead,
   LeadAsociadoCampana,
+  Moneda,
   OrigenLead,
   TipoAtribucionCampana,
   TipoCampana,
@@ -54,6 +55,7 @@ export class CrmCampanasComponent implements OnInit {
 
   readonly tipos = signal<TipoCampana[]>([]);
   readonly origenes = signal<OrigenLead[]>([]);
+  readonly monedas = signal<Moneda[]>([]);
   readonly leadsEmpresa = signal<Lead[]>([]);
 
   // Filtros de campañas
@@ -99,6 +101,7 @@ export class CrmCampanasComponent implements OnInit {
   readonly tiposActivos = computed(() => this.tipos().filter((t) => t.activo));
   readonly tiposMap = computed(() => new Map(this.tipos().map((t) => [t.id, t])));
   readonly origenesMap = computed(() => new Map(this.origenes().map((o) => [o.id, o])));
+  readonly monedasMap = computed(() => new Map(this.monedas().map((m) => [m.id, m])));
 
   readonly hayFiltrosActivos = computed(
     () =>
@@ -171,12 +174,14 @@ export class CrmCampanasComponent implements OnInit {
       origenes: this.crm
         .listarOrigenes(this.empresaId, true)
         .pipe(catchError(() => of([] as OrigenLead[]))),
+      monedas: this.crm.listarMonedas().pipe(catchError(() => of([] as Moneda[]))),
       leads: this.crm
         .listarLeads({ empresa_id: this.empresaId, page: 1, page_size: 100 })
         .pipe(catchError(() => of({ data: [] as Lead[], page: 1, page_size: 100, total: 0 }))),
-    }).subscribe(({ tipos, origenes, leads }) => {
+    }).subscribe(({ tipos, origenes, monedas, leads }) => {
       this.tipos.set(tipos);
       this.origenes.set(origenes);
+      this.monedas.set(monedas);
       this.leadsEmpresa.set(leads.data ?? []);
       this.cargarCampanas();
     });
@@ -337,7 +342,7 @@ export class CrmCampanasComponent implements OnInit {
       return;
     }
     if (raw.presupuesto !== null && raw.presupuesto !== undefined && !raw.moneda_id) {
-      this.errorMensaje.set('Cuando defines un presupuesto debes indicar el ID de moneda.');
+      this.errorMensaje.set('Cuando defines un presupuesto debes seleccionar una moneda.');
       return;
     }
 
@@ -737,6 +742,12 @@ export class CrmCampanasComponent implements OnInit {
     return this.origenesMap().get(id)?.nombre ?? `Origen #${id}`;
   }
 
+  etiquetaMoneda(id: number | null): string {
+    if (!id) return 'Sin moneda';
+    const m = this.monedasMap().get(id);
+    return m ? `${m.codigo_iso} (${m.simbolo})` : `Moneda #${id}`;
+  }
+
   etiquetaEstado(estado: EstadoCampana): string {
     switch (estado) {
       case 'BORRADOR':
@@ -775,7 +786,7 @@ export class CrmCampanasComponent implements OnInit {
       concepto: '',
       categoria_gasto: '',
       valor: 0,
-      moneda_id: c.moneda_id ?? 1,
+      moneda_id: c.moneda_id ?? this.monedas()[0]?.id ?? null,
       proveedor_tercero_empresa_rol_id: null,
     });
   }

@@ -1,5 +1,12 @@
 export type TemperaturaLead = 'FRIO' | 'TIBIO' | 'CALIENTE';
 
+export interface Moneda {
+  id: number;
+  codigo_iso: string;
+  nombre_moneda: string;
+  simbolo: string;
+}
+
 export type EstadoCampana = 'BORRADOR' | 'PROGRAMADA' | 'ACTIVA' | 'PAUSADA' | 'FINALIZADA';
 
 export type TipoAtribucionCampana = 'first_touch' | 'last_touch' | 'influencia';
@@ -388,4 +395,85 @@ export interface CambiarEstadoLeadRequest {
 
 export interface ConvertirLeadRequest {
   estado_id?: number;
+}
+
+export type PrioridadOportunidad = 'BAJA' | 'MEDIA' | 'ALTA';
+
+export interface Oportunidad {
+  id: number;
+  empresa_id: number;
+  sucursal_id: number | null;
+  lead_id: number | null;
+  campana_id: number | null;
+  estado_oportunidad_id: number;
+  motivo_descarte_id: number | null;
+  usuario_asignado_id: number | null;
+  titulo: string;
+  descripcion: string | null;
+  nombre_cliente: string | null;
+  valor_estimado: number;
+  moneda_id: number | null;
+  probabilidad_pct: number;
+  fecha_cierre_estimada: string | null;
+  fecha_cierre_real: string | null;
+  prioridad: PrioridadOportunidad;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListaOportunidadesResponse {
+  data: Oportunidad[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface ListarOportunidadesFiltros {
+  empresa_id: number;
+  estado_oportunidad_id?: number;
+  lead_id?: number;
+  campana_id?: number;
+  prioridad?: PrioridadOportunidad | '';
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface CrearOportunidadRequest {
+  empresa_id: number;
+  sucursal_id?: number | null;
+  lead_id?: number | null;
+  campana_id?: number | null;
+  estado_oportunidad_id: number;
+  motivo_descarte_id?: number | null;
+  titulo: string;
+  descripcion?: string;
+  nombre_cliente?: string;
+  valor_estimado?: number;
+  moneda_id?: number | null;
+  probabilidad_pct?: number;
+  fecha_cierre_estimada?: string;
+  prioridad?: PrioridadOportunidad;
+  created_by: number;
+}
+
+export interface ActualizarOportunidadRequest {
+  lead_id?: number | null;
+  campana_id?: number | null;
+  estado_oportunidad_id?: number;
+  motivo_descarte_id?: number | null;
+  titulo?: string;
+  descripcion?: string;
+  nombre_cliente?: string;
+  valor_estimado?: number;
+  moneda_id?: number | null;
+  probabilidad_pct?: number;
+  fecha_cierre_estimada?: string;
+  prioridad?: PrioridadOportunidad;
+}
+
+export interface CambiarEstadoOportunidadRequest {
+  estado_oportunidad_id: number;
+  motivo_descarte_id?: number | null;
 }

@@ -51,16 +51,29 @@
 
                 @if (isSubmenuOpen(item.label)) {
                   <div class="nav-submenu" role="group" [attr.aria-label]="item.label">
-                    @for (child of item.children; track child.route) {
-                      <a
-                        class="nav-subitem"
-                        [routerLink]="child.route"
-                        routerLinkActive="active"
-                        (click)="closeMobileMenu()"
-                      >
-                        <span class="subitem-line" aria-hidden="true"></span>
-                        <span>{{ child.label }}</span>
-                      </a>
+                    @for (child of item.children; track child.label) {
+                      @if (child.disabled || !child.route) {
+                        <div class="nav-subitem disabled" aria-disabled="true">
+                          <span class="subitem-line" aria-hidden="true"></span>
+                          <span class="subitem-label">{{ child.label }}</span>
+                          @if (child.badge) {
+                            <span class="nav-badge muted">{{ child.badge }}</span>
+                          }
+                        </div>
+                      } @else {
+                        <a
+                          class="nav-subitem"
+                          [routerLink]="child.route"
+                          routerLinkActive="active"
+                          (click)="closeMobileMenu()"
+                        >
+                          <span class="subitem-line" aria-hidden="true"></span>
+                          <span class="subitem-label">{{ child.label }}</span>
+                          @if (child.badge) {
+                            <span class="nav-badge">{{ child.badge }}</span>
+                          }
+                        </a>
+                      }
                     }
                   </div>
                 }

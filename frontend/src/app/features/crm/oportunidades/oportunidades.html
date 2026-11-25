@@ -1,0 +1,367 @@
+<section class="ops-page">
+  <header class="page-header">
+    <div>
+      <h1>Administrar oportunidades</h1>
+      <p class="subtitle">
+        Gestiona negociaciones comerciales, controla su avance por etapa, probabilidad y valor
+        estimado.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarOportunidades()" [disabled]="loading()">
+        @if (loading()) {
+          Actualizando...
+        } @else {
+          Actualizar
+        }
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNueva()">
+        + Nueva oportunidad
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- Barra de filtros -->
+  <section class="filters-panel" aria-label="Filtros de oportunidades">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTexto()"
+        (input)="onBuscarTexto($any($event.target).value)"
+        placeholder="Buscar por título, cliente o descripción..."
+        aria-label="Buscar oportunidades"
+      />
+    </div>
+
+    <select
+      [value]="filtroEstadoId() ?? ''"
+      (change)="onFiltroEstado($any($event.target).value)"
+      aria-label="Filtrar por etapa"
+    >
+      <option value="">Todas las etapas</option>
+      @for (etapa of etapas(); track etapa.id) {
+        <option [value]="etapa.id">{{ etapa.nombre }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroPrioridad()"
+      (change)="onFiltroPrioridad($any($event.target).value)"
+      aria-label="Filtrar por prioridad"
+    >
+      <option value="">Todas las prioridades</option>
+      @for (p of prioridades; track p.value) {
+        <option [value]="p.value">{{ p.label }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroCampanaId() ?? ''"
+      (change)="onFiltroCampana($any($event.target).value)"
+      aria-label="Filtrar por campaña"
+    >
+      <option value="">Todas las campañas</option>
+      @for (c of campanas(); track c.id) {
+        <option [value]="c.id">{{ c.nombre }}</option>
+      }
+    </select>
+
+    @if (hayFiltrosActivos()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltros()">Limpiar</button>
+    }
+  </section>
+
+  <!-- Tabla de oportunidades -->
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>
+        Mostrando <strong>{{ oportunidades().length }}</strong> de <strong>{{ total() }}</strong>
+        oportunidades
+      </span>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando oportunidades...</div>
+    } @else if (oportunidades().length === 0) {
+      <div class="empty-box">
+        @if (hayFiltrosActivos()) {
+          <p>No se encontraron oportunidades con los filtros aplicados.</p>
+          <button type="button" class="btn-secondary" (click)="limpiarFiltros()">
+            Ver todas las oportunidades
+          </button>
+        } @else {
+          <p>Aún no hay oportunidades registradas para esta empresa.</p>
+          <button type="button" class="btn-primary" (click)="abrirNueva()">
+            Crear primera oportunidad
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Oportunidad</th>
+              <th>Lead / Campaña</th>
+              <th>Etapa</th>
+              <th>Prioridad</th>
+              <th class="num">Prob.</th>
+              <th class="num">Valor est.</th>
+              <th>Cierre est.</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (op of oportunidades(); track op.id) {
+              <tr>
+                <td>
+                  <div class="cell-title">{{ op.titulo }}</div>
+                  @if (op.nombre_cliente) {
+                    <div class="cell-sub">{{ op.nombre_cliente }}</div>
+                  }
+                </td>
+
+                <td>
+                  @if (nombreLead(op.lead_id); as leadTxt) {
+                    <div class="cell-line">{{ leadTxt }}</div>
+                  }
+                  @if (nombreCampana(op.campana_id); as campTxt) {
+                    <div class="cell-sub">{{ campTxt }}</div>
+                  }
+                  @if (!op.lead_id && !op.campana_id) {
+                    <span class="muted">—</span>
+                  }
+                </td>
+
+                <td>
+                  @if (etapas().length > 0) {
+                    <select
+                      class="stage-select"
+                      [value]="op.estado_oportunidad_id"
+                      (change)="cambiarEstado(op, $any($event.target).value)"
+                      [attr.aria-label]="'Cambiar etapa de ' + op.titulo"
+                    >
+                      @for (etapa of etapas(); track etapa.id) {
+                        <option [value]="etapa.id">{{ etapa.nombre }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span>{{ nombreEtapa(op.estado_oportunidad_id) }}</span>
+                  }
+                </td>
+
+                <td>
+                  <span class="prio-badge" [attr.data-prio]="op.prioridad">
+                    {{ etiquetaPrioridad(op.prioridad) }}
+                  </span>
+                </td>
+
+                <td class="num">{{ op.probabilidad_pct }}%</td>
+
+                <td class="num">
+                  <strong>{{ op.valor_estimado | currency: 'USD' : 'symbol' : '1.0-0' }}</strong>
+                </td>
+
+                <td class="nowrap">{{ op.fecha_cierre_estimada || '—' }}</td>
+
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="abrirEditar(op)">
+                      Editar
+                    </button>
+                    <button type="button" class="btn-icon danger" (click)="solicitarEliminar(op)">
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPaginas() > 1) {
+        <footer class="pagination">
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() <= 1"
+            (click)="irAPagina(page() - 1)"
+          >
+            ← Anterior
+          </button>
+          <span class="page-info">Página {{ page() }} de {{ totalPaginas() }}</span>
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() >= totalPaginas()"
+            (click)="irAPagina(page() + 1)"
+          >
+            Siguiente →
+          </button>
+        </footer>
+      }
+    }
+  </section>
+</section>
+
+<!-- Modal Crear / Editar Oportunidad -->
+@if (modalAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModal()">
+    <div
+      class="modal-card"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="editando() ? 'Editar oportunidad' : 'Nueva oportunidad'"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal-header">
+        <h2>{{ editando() ? 'Editar oportunidad' : 'Nueva oportunidad' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModal()" aria-label="Cerrar">×</button>
+      </header>
+
+      <form [formGroup]="form" (ngSubmit)="guardar()" class="modal-form">
+        @if (etapas().length === 0) {
+          <div class="alert warning">
+            Debes configurar al menos una etapa de oportunidad en <strong>CRM → Configuración</strong>.
+          </div>
+        }
+
+        <div class="form-grid">
+          <label class="field full">
+            <span>Título de la oportunidad *</span>
+            <input type="text" formControlName="titulo" placeholder="Ej. Licencia anual Plan Enterprise" />
+          </label>
+
+          <label class="field">
+            <span>Cliente / Empresa</span>
+            <input type="text" formControlName="nombre_cliente" placeholder="Ej. Acme S.A." />
+          </label>
+
+          <label class="field">
+            <span>Etapa *</span>
+            <select
+              formControlName="estado_oportunidad_id"
+              (change)="onCambioEtapaForm(form.controls.estado_oportunidad_id.value)"
+            >
+              <option [ngValue]="null" disabled>Selecciona una etapa</option>
+              @for (etapa of etapas(); track etapa.id) {
+                <option [ngValue]="etapa.id">{{ etapa.nombre }} ({{ etapa.probabilidad_pct }}%)</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Lead asociado (opcional)</span>
+            <select formControlName="lead_id">
+              <option [ngValue]="null">Sin lead asociado</option>
+              @for (l of leads(); track l.id) {
+                <option [ngValue]="l.id">
+                  {{ l.nombre }} {{ l.apellido }}@if (l.nombre_empresa) { · {{ l.nombre_empresa }} }
+                </option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Campaña (opcional)</span>
+            <select formControlName="campana_id">
+              <option [ngValue]="null">Sin campaña</option>
+              @for (c of campanas(); track c.id) {
+                <option [ngValue]="c.id">{{ c.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Valor estimado</span>
+            <input type="number" min="0" step="0.01" formControlName="valor_estimado" />
+          </label>
+
+          <label class="field">
+            <span>Probabilidad (%)</span>
+            <input type="number" min="0" max="100" formControlName="probabilidad_pct" />
+          </label>
+
+          <label class="field">
+            <span>Prioridad</span>
+            <select formControlName="prioridad">
+              @for (p of prioridades; track p.value) {
+                <option [value]="p.value">{{ p.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Fecha de cierre estimada</span>
+            <input type="date" formControlName="fecha_cierre_estimada" />
+          </label>
+
+          @if (esEtapaPerdidaSeleccionada()) {
+            <label class="field full">
+              <span>Motivo de descarte</span>
+              <select formControlName="motivo_descarte_id">
+                <option [ngValue]="null">Sin motivo</option>
+                @for (m of motivos(); track m.id) {
+                  <option [ngValue]="m.id">{{ m.descripcion }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          <label class="field full">
+            <span>Descripción / notas</span>
+            <textarea rows="2" formControlName="descripcion" placeholder="Detalle del alcance comercial..."></textarea>
+          </label>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModal()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving() || form.invalid">
+            @if (saving()) {
+              Guardando...
+            } @else if (editando()) {
+              Guardar cambios
+            } @else {
+              Crear oportunidad
+            }
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminación (Soft Delete) -->
+@if (aEliminar(); as op) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div class="modal-card confirm-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Eliminar oportunidad</h2>
+        <button type="button" class="btn-close" (click)="cancelarEliminar()" aria-label="Cerrar">×</button>
+      </header>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar la oportunidad <strong>{{ op.titulo }}</strong>?
+      </p>
+      <footer class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="cancelarEliminar()" [disabled]="saving()">
+          Cancelar
+        </button>
+        <button type="button" class="btn-danger" (click)="confirmarEliminar()" [disabled]="saving()">
+          {{ saving() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+}

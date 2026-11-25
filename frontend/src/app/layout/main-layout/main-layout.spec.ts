@@ -30,8 +30,8 @@ describe('MainLayoutComponent', () => {
     crmButton!.click();
     fixture.detectChanges();
 
-    const subitems = Array.from(el.querySelectorAll<HTMLAnchorElement>('.nav-subitem')).map((a) =>
-      a.textContent?.trim(),
+    const subitems = Array.from(el.querySelectorAll<HTMLElement>('.nav-subitem')).map((node) =>
+      node.querySelector('.subitem-label')?.textContent?.trim(),
     );
     expect(subitems).toEqual([
       'Resumen comercial',
@@ -43,6 +43,8 @@ describe('MainLayoutComponent', () => {
       'Campañas',
       'Configuración',
     ]);
+    expect(el.querySelectorAll('.nav-subitem.disabled').length).toBe(4);
+    expect(el.querySelectorAll('a.nav-subitem').length).toBe(4);
 
     crmButton!.click();
     fixture.detectChanges();
