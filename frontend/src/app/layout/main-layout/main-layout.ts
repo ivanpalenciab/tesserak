@@ -91,7 +91,7 @@ export class MainLayoutComponent {
           ],
         },
         { label: 'Compras', route: '/compras', icon: 'purchases' },
-        { label: 'Inventario', icon: 'inventory', disabled: true, badge: 'Pronto' },
+        { label: 'Inventario', route: '/inventario', icon: 'inventory' },
       ],
     },
     {

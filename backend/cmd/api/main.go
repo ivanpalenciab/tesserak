@@ -20,6 +20,7 @@ import (
 	"tesserak/backend/internal/crm"
 	"tesserak/backend/internal/database"
 	"tesserak/backend/internal/empresas"
+	"tesserak/backend/internal/inventario"
 	"tesserak/backend/internal/precios"
 	"tesserak/backend/internal/productos"
 	"tesserak/backend/internal/terceros"
@@ -89,6 +90,10 @@ func main() {
 	).RegisterRoutes(api)
 	consecutivos.NewHandler(
 		consecutivos.NewService(consecutivos.NewRepository(db)),
+		auth.RequireAuth(cfg.JWTSecret),
+	).RegisterRoutes(api)
+	inventario.NewHandler(
+		inventario.NewService(inventario.NewRepository(db)),
 		auth.RequireAuth(cfg.JWTSecret),
 	).RegisterRoutes(api)
 

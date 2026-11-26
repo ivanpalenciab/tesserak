@@ -1,0 +1,577 @@
+<section class="inv-page">
+  <header class="page-header">
+    <div>
+      <h1>Inventarios</h1>
+      <p class="subtitle">
+        Selecciona una ubicación para ver sus productos en stock, o realiza traslados internos,
+        ajustes, pérdidas, averías y devoluciones.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarCatalogos()">Actualizar</button>
+      <button
+        type="button"
+        class="btn-secondary"
+        (click)="abrirTraslado()"
+        [disabled]="ubicacionesActivas().length < 2"
+        title="Mover productos entre ubicaciones internas"
+      >
+        ⇄ Trasladar entre ubicaciones
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNuevoMovimiento()">
+        + Ajuste / movimiento
+      </button>
+    </div>
+  </header>
+
+  <nav class="tabs-bar" aria-label="Secciones de inventario">
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="tabActiva() === 'ubicaciones'"
+      (click)="cambiarTab('ubicaciones')"
+    >
+      Ubicaciones y existencias ({{ ubicacionesActivas().length }})
+    </button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="tabActiva() === 'movimientos'"
+      (click)="cambiarTab('movimientos')"
+    >
+      Historial de movimientos
+    </button>
+  </nav>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <!-- TAB 1: Solo ubicaciones; al dar clic despliega el detalle de productos en esa ubicación -->
+  @if (tabActiva() === 'ubicaciones') {
+    <section class="table-panel">
+      <div class="table-meta">
+        <span>
+          <strong>{{ ubicacionesActivas().length }}</strong> ubicaciones activas · Haz clic en una
+          ubicación para ver el detalle de sus productos
+        </span>
+      </div>
+
+      @if (loading()) {
+        <div class="empty-box">Cargando ubicaciones...</div>
+      } @else if (ubicacionesActivas().length === 0) {
+        <div class="empty-box">
+          <p>
+            No hay ubicaciones activas configuradas. Puedes crearlas en
+            <strong>Administración → Gestión de empresa</strong>.
+          </p>
+        </div>
+      } @else {
+        <div class="ubicaciones-grid">
+          @for (u of ubicacionesActivas(); track u.id) {
+            <button
+              type="button"
+              class="ubicacion-card"
+              [class.selected]="ubicacionSeleccionada()?.id === u.id"
+              (click)="seleccionarUbicacion(u)"
+            >
+              <div class="ubicacion-card-top">
+                <span class="sku-pill">{{ u.codigo }}</span>
+                <span class="ubicacion-sucursal">{{ u.sucursal_nombre || 'Sucursal #' + u.sucursal_id }}</span>
+              </div>
+              <div class="ubicacion-nombre">{{ u.nombre }}</div>
+              @if (u.descripcion) {
+                <div class="ubicacion-desc">{{ u.descripcion }}</div>
+              }
+              <div class="ubicacion-cta">
+                {{ ubicacionSeleccionada()?.id === u.id ? 'Viendo productos' : 'Ver productos →' }}
+              </div>
+            </button>
+          }
+        </div>
+      }
+    </section>
+
+    <!-- Detalle de productos: solo aparece al hacer clic en una ubicación -->
+    @if (ubicacionSeleccionada(); as ubic) {
+      <section class="detail-section" aria-label="Productos en ubicación seleccionada">
+        <div class="detail-header">
+          <div>
+            <h2>Productos en: {{ ubic.nombre }}</h2>
+            <p class="subtitle">
+              Código: <strong>{{ ubic.codigo }}</strong> · Existencias consolidadas en
+              <code>inv_stock</code>
+            </p>
+          </div>
+
+          <div class="header-actions">
+            <button type="button" class="btn-secondary" (click)="cerrarUbicacion()">
+              Ocultar productos
+            </button>
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="abrirTraslado({ ubicacion_origen_id: ubic.id })"
+              [disabled]="ubicacionesActivas().length < 2"
+            >
+              ⇄ Trasladar desde aquí
+            </button>
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="abrirNuevoMovimiento({ ubicacion_origen_id: ubic.id, ubicacion_destino_id: ubic.id })"
+            >
+              + Ajuste en esta ubicación
+            </button>
+          </div>
+        </div>
+
+        <div class="filters-panel">
+          <div class="filter-search">
+            <input
+              type="search"
+              [value]="filtroStockTexto()"
+              (input)="onBuscarStock($any($event.target).value)"
+              placeholder="Buscar producto por código o nombre..."
+              aria-label="Buscar productos en ubicación"
+            />
+          </div>
+
+          <label class="checkbox-field">
+            <input
+              type="checkbox"
+              [checked]="filtroSoloConStock()"
+              (change)="onToggleSoloConStock($any($event.target).checked)"
+            />
+            <span>Solo con stock &gt; 0</span>
+          </label>
+        </div>
+
+        <div class="table-panel">
+          <div class="table-meta">
+            <span>
+              Mostrando <strong>{{ stockItems().length }}</strong> de
+              <strong>{{ totalStock() }}</strong> productos en <strong>{{ ubic.nombre }}</strong>
+            </span>
+          </div>
+
+          @if (loadingStock()) {
+            <div class="empty-box">Cargando productos de {{ ubic.nombre }}...</div>
+          } @else if (stockItems().length === 0) {
+            <div class="empty-box">
+              <p>No hay productos con existencias en esta ubicación.</p>
+              <button
+                type="button"
+                class="btn-primary"
+                (click)="abrirNuevoMovimiento({ ubicacion_destino_id: ubic.id })"
+              >
+                Registrar ingreso o ajuste
+              </button>
+            </div>
+          } @else {
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Producto</th>
+                    <th>Stock disponible</th>
+                    <th>Costo promedio</th>
+                    <th>Valor total</th>
+                    <th class="actions-col">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of stockItems(); track item.id) {
+                    <tr>
+                      <td class="nowrap">
+                        <span class="sku-pill">{{ item.articulo_codigo || '#' + item.articulo_id }}</span>
+                      </td>
+                      <td>
+                        <div class="cell-title">{{ item.articulo_nombre || 'Artículo #' + item.articulo_id }}</div>
+                      </td>
+                      <td class="nowrap">
+                        <span class="qty-badge" [class.zero]="item.cantidad <= 0">
+                          {{ item.cantidad }}
+                        </span>
+                      </td>
+                      <td class="nowrap">{{ formatearMonto(item.costo_promedio) }}</td>
+                      <td class="nowrap price-cell">{{ formatearMonto(item.valor_total) }}</td>
+                      <td class="actions-col">
+                        <div class="row-actions">
+                          @if (ubicacionesActivas().length >= 2 && item.cantidad > 0) {
+                            <button
+                              type="button"
+                              class="btn-icon primary-soft"
+                              (click)="abrirTraslado({ articulo_id: item.articulo_id, ubicacion_origen_id: ubic.id })"
+                            >
+                              ⇄ Trasladar
+                            </button>
+                          }
+                          <button
+                            type="button"
+                            class="btn-icon"
+                            (click)="abrirNuevoMovimiento({ articulo_id: item.articulo_id, ubicacion_origen_id: ubic.id, ubicacion_destino_id: ubic.id })"
+                          >
+                            Ajustar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if (totalPaginasStock() > 1) {
+              <div class="pagination">
+                <span class="page-info">Página {{ pageStock() }} de {{ totalPaginasStock() }}</span>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="btn-secondary"
+                    (click)="irPaginaStock(pageStock() - 1)"
+                    [disabled]="pageStock() <= 1"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-secondary"
+                    (click)="irPaginaStock(pageStock() + 1)"
+                    [disabled]="pageStock() >= totalPaginasStock()"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </section>
+    }
+  }
+
+  <!-- TAB 2: Historial de movimientos -->
+  @if (tabActiva() === 'movimientos') {
+    <section class="filters-panel">
+      <div class="filter-search">
+        <input
+          type="search"
+          [value]="filtroMovTexto()"
+          (input)="onBuscarMov($any($event.target).value)"
+          placeholder="Buscar por consecutivo, motivo u observaciones..."
+          aria-label="Buscar movimientos"
+        />
+      </div>
+
+      <select
+        [value]="filtroMovTipoId() ?? ''"
+        (change)="onFiltroMovTipo($any($event.target).value)"
+        aria-label="Filtrar por tipo de movimiento"
+      >
+        <option value="">Todos los tipos de movimiento</option>
+        @for (t of tiposMovimiento(); track t.id) {
+          <option [value]="t.id">{{ t.nombre }}</option>
+        }
+      </select>
+
+      <select
+        [value]="filtroMovUbicacionId() ?? ''"
+        (change)="onFiltroMovUbicacion($any($event.target).value)"
+        aria-label="Filtrar por ubicación"
+      >
+        <option value="">Todas las ubicaciones</option>
+        @for (u of ubicaciones(); track u.id) {
+          <option [value]="u.id">{{ u.nombre }}</option>
+        }
+      </select>
+    </section>
+
+    <section class="table-panel">
+      <div class="table-meta">
+        <span>
+          Mostrando <strong>{{ movimientos().length }}</strong> de
+          <strong>{{ totalMovs() }}</strong> movimientos registrados
+        </span>
+      </div>
+
+      @if (loadingMovs()) {
+        <div class="empty-box">Cargando historial de movimientos...</div>
+      } @else if (movimientos().length === 0) {
+        <div class="empty-box">
+          <p>Aún no hay movimientos o ajustes registrados.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevoMovimiento()">
+            Registrar ajuste / movimiento
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Consecutivo</th>
+                <th>Fecha</th>
+                <th>Tipo de movimiento</th>
+                <th>Motivo</th>
+                <th>Tercero</th>
+                <th>Usuario</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (doc of movimientos(); track doc.id) {
+                <tr
+                  class="selectable-row"
+                  [class.selected]="movDetalle()?.id === doc.id"
+                  (click)="verDetalleMovimiento(doc)"
+                >
+                  <td class="nowrap"><span class="sku-pill">{{ doc.consecutivo }}</span></td>
+                  <td class="nowrap">{{ formatearFecha(doc.fecha) }}</td>
+                  <td class="nowrap">
+                    <span class="nat-badge" [attr.data-nat]="doc.tipo_movimiento_naturaleza">
+                      {{ etiquetaNaturaleza(doc.tipo_movimiento_naturaleza) }} ·
+                      {{ doc.tipo_movimiento_nombre }}
+                    </span>
+                  </td>
+                  <td>{{ doc.motivo }}</td>
+                  <td>{{ doc.tercero_nombre || '—' }}</td>
+                  <td class="nowrap">{{ doc.usuario_nombre || '#' + doc.usuario_id }}</td>
+                  <td class="actions-col">
+                    <button
+                      type="button"
+                      class="btn-icon primary-soft"
+                      (click)="verDetalleMovimiento(doc); $event.stopPropagation()"
+                    >
+                      Ver líneas
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    @if (movDetalle(); as det) {
+      <section class="detail-section">
+        <div class="detail-header">
+          <div>
+            <h2>Detalle de movimiento {{ det.consecutivo }}</h2>
+            <p class="subtitle">
+              {{ det.tipo_movimiento_nombre }} · Motivo: <strong>{{ det.motivo }}</strong>
+              @if (det.observaciones) { · {{ det.observaciones }} }
+            </p>
+          </div>
+          <button type="button" class="btn-secondary" (click)="cerrarDetalleMovimiento()">
+            Ocultar
+          </button>
+        </div>
+
+        <div class="table-panel">
+          @if (loadingMovDetalle()) {
+            <div class="empty-box">Cargando líneas...</div>
+          } @else {
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Artículo</th>
+                    <th>Origen</th>
+                    <th>Destino</th>
+                    <th>Cantidad</th>
+                    <th>Costo unitario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (l of det.detalles ?? []; track l.id) {
+                    <tr>
+                      <td>
+                        <span class="sku-pill">{{ l.articulo_codigo || '#' + l.articulo_id }}</span>
+                        {{ l.articulo_nombre }}
+                      </td>
+                      <td>{{ l.ubicacion_origen_nombre || '—' }}</td>
+                      <td>{{ l.ubicacion_destino_nombre || '—' }}</td>
+                      <td class="nowrap price-cell">{{ l.cantidad }}</td>
+                      <td class="nowrap">{{ formatearMonto(l.costo_unitario) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      </section>
+    }
+  }
+</section>
+
+<!-- Modal Nuevo Movimiento / Ajuste / Traslado -->
+@if (modalMovAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalMov()">
+    <div
+      class="modal-card modal-wide"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Nuevo movimiento / ajuste de inventario</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalMov()" aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="formMov" (ngSubmit)="guardarMovimiento()">
+        @if (modalMovError(); as err) {
+          <div class="alert error" role="alert">{{ err }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Tipo de movimiento *</span>
+            <select
+              formControlName="tipo_movimiento_id"
+              (change)="onCambiarTipoMovimiento()"
+            >
+              @for (t of tiposMovimiento(); track t.id) {
+                <option [ngValue]="t.id">
+                  {{ etiquetaNaturaleza(t.naturaleza) }} · {{ t.nombre }}
+                </option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Fecha</span>
+            <input type="date" formControlName="fecha" />
+          </label>
+
+          <label class="field">
+            <span>Motivo *</span>
+            <input
+              type="text"
+              formControlName="motivo"
+              placeholder="Ej: Traslado a vitrina, mercancía averiada, devolución..."
+            />
+          </label>
+
+          <label class="field">
+            <span>Tercero asociado (opcional — devoluciones)</span>
+            <select formControlName="tercero_id">
+              <option [ngValue]="null">Ninguno</option>
+              @for (ter of terceros(); track ter.id) {
+                <option [ngValue]="ter.id">
+                  {{ ter.tipo_identificacion }} {{ ter.numero_identificacion }} —
+                  {{ ter.razon_social }}
+                </option>
+              }
+            </select>
+          </label>
+
+          <label class="field full">
+            <span>Observaciones</span>
+            <input
+              type="text"
+              formControlName="observaciones"
+              placeholder="Detalles adicionales del ajuste o traslado..."
+            />
+          </label>
+        </div>
+
+        <div class="lines-section">
+          <div class="lines-header">
+            <h3>Artículos a mover / ajustar *</h3>
+            <button type="button" class="btn-secondary" (click)="agregarLineaMov()">
+              + Agregar línea
+            </button>
+          </div>
+
+          <div class="lines-list" formArrayName="detalles">
+            @for (linea of detallesArray.controls; track $index; let i = $index) {
+              <div class="line-card" [formGroupName]="i">
+                <div class="line-grid">
+                  <label class="field span-2">
+                    <span>Artículo *</span>
+                    <select formControlName="articulo_id">
+                      <option [ngValue]="null">Seleccionar artículo...</option>
+                      @for (art of articulos(); track art.id) {
+                        <option [ngValue]="art.id">{{ art.codigo }} — {{ art.nombre }}</option>
+                      }
+                    </select>
+                  </label>
+
+                  @if (tipoMovSeleccionado()?.naturaleza !== 'ENTRADA') {
+                    <label class="field">
+                      <span>Ubicación origen *</span>
+                      <select formControlName="ubicacion_origen_id">
+                        <option [ngValue]="null">Seleccionar...</option>
+                        @for (u of ubicacionesActivas(); track u.id) {
+                          <option [ngValue]="u.id">{{ u.nombre }}</option>
+                        }
+                      </select>
+                    </label>
+                  }
+
+                  @if (tipoMovSeleccionado()?.naturaleza !== 'SALIDA') {
+                    <label class="field">
+                      <span>Ubicación destino *</span>
+                      <select formControlName="ubicacion_destino_id">
+                        <option [ngValue]="null">Seleccionar...</option>
+                        @for (u of ubicacionesActivas(); track u.id) {
+                          <option [ngValue]="u.id">{{ u.nombre }}</option>
+                        }
+                      </select>
+                    </label>
+                  }
+
+                  <label class="field">
+                    <span>Cantidad *</span>
+                    <input type="number" step="0.01" min="0.0001" formControlName="cantidad" />
+                  </label>
+
+                  <label class="field">
+                    <span>Costo unitario</span>
+                    <input type="number" step="0.01" min="0" formControlName="costo_unitario" />
+                  </label>
+
+                  @if (detallesArray.length > 1) {
+                    <div class="line-remove">
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="eliminarLineaMov(i)"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarModalMov()"
+            [disabled]="savingMov()"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="savingMov()">
+            {{ savingMov() ? 'Aplicando...' : 'Aplicar movimiento' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

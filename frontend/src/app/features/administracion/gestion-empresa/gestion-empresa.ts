@@ -5,6 +5,8 @@ import { catchError, forkJoin, of } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { ApiErrorBody } from '../../../core/auth/auth.models';
+import { InventarioService } from '../../inventario/inventario.service';
+import { SucursalOption, Ubicacion } from '../../inventario/inventario.models';
 import { GestionEmpresaService } from '../gestion-empresa.service';
 import {
   EmpresaDetalle,
@@ -36,6 +38,7 @@ export const FRECUENCIAS_REINICIO: { value: FrecuenciaReinicio; label: string }[
 })
 export class GestionEmpresaComponent implements OnInit {
   private readonly svc = inject(GestionEmpresaService);
+  private readonly invSvc = inject(InventarioService);
   private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
@@ -48,6 +51,23 @@ export class GestionEmpresaComponent implements OnInit {
   readonly empresa = signal<EmpresaDetalle | null>(null);
   readonly usuarioDetalle = signal<UsuarioKeyDetalle | null>(null);
   readonly secuenciasItems = signal<SecuenciaItemForm[]>([]);
+  readonly ubicaciones = signal<Ubicacion[]>([]);
+  readonly sucursales = signal<SucursalOption[]>([]);
+
+  // Controles de ubicaciones (crear, editar, activar/desactivar, soft delete)
+  readonly modalUbicAbierto = signal(false);
+  readonly savingUbic = signal(false);
+  readonly modalUbicError = signal<string | null>(null);
+  readonly editandoUbic = signal<Ubicacion | null>(null);
+  readonly ubicAEliminar = signal<Ubicacion | null>(null);
+
+  readonly formUbic = this.fb.group({
+    sucursal_id: [null as number | null, [Validators.required]],
+    codigo: ['', [Validators.required, Validators.maxLength(40)]],
+    nombre: ['', [Validators.required, Validators.maxLength(120)]],
+    descripcion: ['', [Validators.maxLength(255)]],
+    activo: [true],
+  });
 
   // Controles de la key de usuario
   readonly keyVisible = signal(false);
@@ -80,10 +100,18 @@ export class GestionEmpresaComponent implements OnInit {
       secuencias: this.svc
         .listarSecuencias()
         .pipe(catchError(() => of([] as SecuenciaDocumento[]))),
+      ubicaciones: this.invSvc
+        .listarUbicaciones()
+        .pipe(catchError(() => of([] as Ubicacion[]))),
+      sucursales: this.invSvc
+        .listarSucursales()
+        .pipe(catchError(() => of([] as SucursalOption[]))),
     }).subscribe({
-      next: ({ empresa, usuario, tipos, secuencias }) => {
+      next: ({ empresa, usuario, tipos, secuencias, ubicaciones, sucursales }) => {
         this.empresa.set(empresa);
         this.usuarioDetalle.set(usuario);
+        this.ubicaciones.set(ubicaciones);
+        this.sucursales.set(sucursales);
 
         const secPorTipo = new Map(secuencias.map((s) => [s.tipo_documento_id, s]));
         const items: SecuenciaItemForm[] = tipos
@@ -207,6 +235,154 @@ export class GestionEmpresaComponent implements OnInit {
         item.saving = false;
         this.errorMensaje.set(
           this.extraerMensajeError(err, `No se pudo guardar el prefijo de ${item.tipo.nombre}.`),
+        );
+      },
+    });
+  }
+
+  // =====================================================================
+  // Administración de Ubicaciones (crear, editar, activar/desactivar, soft delete)
+  // =====================================================================
+
+  abrirNuevaUbicacion(): void {
+    this.editandoUbic.set(null);
+    this.modalUbicError.set(null);
+    this.formUbic.reset({
+      sucursal_id: null,
+      codigo: '',
+      nombre: '',
+      descripcion: '',
+      activo: true,
+    });
+    this.modalUbicAbierto.set(true);
+    if (this.sucursales().length === 0) {
+      this.cargarSucursales();
+    }
+  }
+
+  abrirEditarUbicacion(u: Ubicacion): void {
+    this.editandoUbic.set(u);
+    this.modalUbicError.set(null);
+    this.formUbic.reset({
+      sucursal_id: u.sucursal_id,
+      codigo: u.codigo,
+      nombre: u.nombre,
+      descripcion: u.descripcion ?? '',
+      activo: u.activo,
+    });
+    this.modalUbicAbierto.set(true);
+    if (this.sucursales().length === 0) {
+      this.cargarSucursales();
+    }
+  }
+
+  private cargarSucursales(): void {
+    this.invSvc.listarSucursales().subscribe({
+      next: (list) => this.sucursales.set(list),
+      error: (err) => {
+        this.modalUbicError.set(
+          this.extraerMensajeError(
+            err,
+            'No se pudieron cargar las sucursales disponibles. Verifica que el servidor backend esté reiniciado y actualizado.',
+          ),
+        );
+      },
+    });
+  }
+
+  cerrarModalUbic(): void {
+    if (this.savingUbic()) return;
+    this.modalUbicAbierto.set(false);
+    this.editandoUbic.set(null);
+    this.modalUbicError.set(null);
+  }
+
+  guardarUbicacion(): void {
+    this.modalUbicError.set(null);
+    if (this.formUbic.invalid) {
+      this.formUbic.markAllAsTouched();
+      return;
+    }
+
+    const v = this.formUbic.getRawValue();
+    this.savingUbic.set(true);
+    const actual = this.editandoUbic();
+
+    const req$ = actual
+      ? this.invSvc.actualizarUbicacion(actual.id, {
+          sucursal_id: Number(v.sucursal_id),
+          codigo: (v.codigo ?? '').trim(),
+          nombre: (v.nombre ?? '').trim(),
+          descripcion: (v.descripcion ?? '').trim() || null,
+          activo: Boolean(v.activo),
+        })
+      : this.invSvc.crearUbicacion({
+          sucursal_id: Number(v.sucursal_id),
+          codigo: (v.codigo ?? '').trim(),
+          nombre: (v.nombre ?? '').trim(),
+          descripcion: (v.descripcion ?? '').trim() || null,
+          activo: Boolean(v.activo),
+        });
+
+    req$.subscribe({
+      next: (u) => {
+        this.savingUbic.set(false);
+        this.modalUbicAbierto.set(false);
+        this.editandoUbic.set(null);
+        this.mostrarExito(`Ubicación "${u.nombre}" guardada correctamente.`);
+        this.invSvc.listarUbicaciones().subscribe((list) => this.ubicaciones.set(list));
+      },
+      error: (err) => {
+        this.savingUbic.set(false);
+        this.modalUbicError.set(
+          this.extraerMensajeError(err, 'No se pudo guardar la ubicación.'),
+        );
+      },
+    });
+  }
+
+  toggleActivoUbicacion(u: Ubicacion): void {
+    const nuevoEstado = !u.activo;
+    this.invSvc.actualizarUbicacion(u.id, { activo: nuevoEstado }).subscribe({
+      next: () => {
+        this.mostrarExito(
+          `Ubicación "${u.nombre}" ${nuevoEstado ? 'activada' : 'desactivada'}.`,
+        );
+        this.invSvc.listarUbicaciones().subscribe((list) => this.ubicaciones.set(list));
+      },
+      error: (err) => {
+        this.errorMensaje.set(
+          this.extraerMensajeError(err, 'No se pudo cambiar el estado de la ubicación.'),
+        );
+      },
+    });
+  }
+
+  solicitarEliminarUbicacion(u: Ubicacion): void {
+    this.ubicAEliminar.set(u);
+  }
+
+  cancelarEliminarUbicacion(): void {
+    if (this.savingUbic()) return;
+    this.ubicAEliminar.set(null);
+  }
+
+  confirmarEliminarUbicacion(): void {
+    const target = this.ubicAEliminar();
+    if (!target) return;
+    this.savingUbic.set(true);
+    this.invSvc.eliminarUbicacion(target.id).subscribe({
+      next: () => {
+        this.savingUbic.set(false);
+        this.ubicAEliminar.set(null);
+        this.mostrarExito(`Ubicación "${target.nombre}" eliminada.`);
+        this.invSvc.listarUbicaciones().subscribe((list) => this.ubicaciones.set(list));
+      },
+      error: (err) => {
+        this.savingUbic.set(false);
+        this.ubicAEliminar.set(null);
+        this.errorMensaje.set(
+          this.extraerMensajeError(err, 'No se pudo eliminar la ubicación.'),
         );
       },
     });

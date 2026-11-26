@@ -93,6 +93,15 @@ describe('GestionEmpresaComponent', () => {
         },
       ],
     });
+    httpMock.expectOne(`${environment.apiUrl}/inventario/ubicaciones`).flush({
+      data: [],
+    });
+    httpMock.expectOne(`${environment.apiUrl}/inventario/sucursales`).flush({
+      data: [
+        { id: 1, nombre: 'Sede Principal', activo: true },
+        { id: 2, nombre: 'Sucursal Norte', activo: true },
+      ],
+    });
 
     const comp = fixture.componentInstance;
     expect(comp.loading()).toBe(false);
@@ -166,5 +175,53 @@ describe('GestionEmpresaComponent', () => {
 
     expect(comp.usuarioDetalle()?.key).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
     expect(comp.keyVisible()).toBe(true);
+
+    // 4. Crear una ubicación seleccionando la sucursal a la que pertenece
+    comp.abrirNuevaUbicacion();
+    expect(comp.formUbic.invalid).toBe(true);
+    comp.formUbic.patchValue({
+      sucursal_id: 2,
+      codigo: 'BOD-NORTE',
+      nombre: 'Bodega Norte',
+      descripcion: 'Almacén sucursal norte',
+      activo: true,
+    });
+    comp.guardarUbicacion();
+
+    const postUbic = httpMock.expectOne(`${environment.apiUrl}/inventario/ubicaciones`);
+    expect(postUbic.request.method).toBe('POST');
+    expect(postUbic.request.body.sucursal_id).toBe(2);
+    expect(postUbic.request.body.codigo).toBe('BOD-NORTE');
+    postUbic.flush({
+      id: 3,
+      empresa_id: 1,
+      sucursal_id: 2,
+      sucursal_nombre: 'Sucursal Norte',
+      codigo: 'BOD-NORTE',
+      nombre: 'Bodega Norte',
+      descripcion: 'Almacén sucursal norte',
+      activo: true,
+      created_at: '2026-11-26T00:00:00Z',
+      updated_at: '2026-11-26T00:00:00Z',
+    });
+
+    httpMock.expectOne(`${environment.apiUrl}/inventario/ubicaciones`).flush({
+      data: [
+        {
+          id: 3,
+          empresa_id: 1,
+          sucursal_id: 2,
+          sucursal_nombre: 'Sucursal Norte',
+          codigo: 'BOD-NORTE',
+          nombre: 'Bodega Norte',
+          descripcion: 'Almacén sucursal norte',
+          activo: true,
+          created_at: '2026-11-26T00:00:00Z',
+          updated_at: '2026-11-26T00:00:00Z',
+        },
+      ],
+    });
+    expect(comp.ubicaciones().length).toBe(1);
+    expect(comp.ubicaciones()[0].sucursal_id).toBe(2);
   });
 });

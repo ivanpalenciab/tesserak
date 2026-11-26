@@ -121,7 +121,84 @@
       }
     </section>
 
-    <!-- Sección 2: Key del usuario -->
+    <!-- Sección 2: Ubicaciones / Bodegas de inventario -->
+    <section class="panel" aria-label="Ubicaciones de inventario">
+      <div class="panel-header panel-header-row">
+        <div>
+          <h2>Ubicaciones y bodegas</h2>
+          <p class="subtitle">
+            Crea, modifica, activa/desactiva o elimina (soft delete) las bodegas y ubicaciones de
+            inventario de tu empresa.
+          </p>
+        </div>
+        <button type="button" class="btn-primary" (click)="abrirNuevaUbicacion()">
+          + Nueva ubicación
+        </button>
+      </div>
+
+      @if (ubicaciones().length === 0) {
+        <div class="empty-box">Aún no hay ubicaciones configuradas para tu empresa.</div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Sucursal</th>
+                <th>Descripción</th>
+                <th>Estado</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (u of ubicaciones(); track u.id) {
+                <tr>
+                  <td class="nowrap"><span class="code-pill">{{ u.codigo }}</span></td>
+                  <td><strong>{{ u.nombre }}</strong></td>
+                  <td class="nowrap">{{ u.sucursal_nombre || '#' + u.sucursal_id }}</td>
+                  <td>{{ u.descripcion || '—' }}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      [class.active]="u.activo"
+                      [class.inactive]="!u.activo"
+                    >
+                      {{ u.activo ? 'Activa' : 'Inactiva' }}
+                    </span>
+                  </td>
+                  <td class="actions-col">
+                    <div class="row-actions">
+                      <button type="button" class="btn-icon" (click)="abrirEditarUbicacion(u)">
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        [class.success]="!u.activo"
+                        [class.warning]="u.activo"
+                        (click)="toggleActivoUbicacion(u)"
+                      >
+                        {{ u.activo ? 'Desactivar' : 'Activar' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminarUbicacion(u)"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    <!-- Sección 3: Key del usuario -->
     <section class="panel" aria-label="Key del usuario">
       <div class="panel-header">
         <div>
@@ -168,6 +245,121 @@
     </section>
   }
 </section>
+
+<!-- Modal Crear / Editar Ubicación -->
+@if (modalUbicAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalUbic()">
+    <div class="modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>{{ editandoUbic() ? 'Editar ubicación' : 'Nueva ubicación' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModalUbic()" aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="formUbic" (ngSubmit)="guardarUbicacion()">
+        @if (modalUbicError(); as err) {
+          <div class="alert error" role="alert">{{ err }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field full">
+            <span>Sucursal *</span>
+            <select formControlName="sucursal_id">
+              <option [ngValue]="null">Seleccionar sucursal...</option>
+              @for (s of sucursales(); track s.id) {
+                <option [ngValue]="s.id">{{ s.nombre }}</option>
+              }
+            </select>
+            @if (formUbic.controls.sucursal_id.touched && formUbic.controls.sucursal_id.invalid) {
+              <small class="field-error">Selecciona la sucursal a la que pertenece.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Código *</span>
+            <input type="text" formControlName="codigo" placeholder="Ej: BOD-02, VIT-01" />
+          </label>
+
+          <label class="field">
+            <span>Nombre *</span>
+            <input type="text" formControlName="nombre" placeholder="Ej: Bodega Norte, Vitrina" />
+          </label>
+
+          <label class="field full">
+            <span>Descripción</span>
+            <input type="text" formControlName="descripcion" placeholder="Descripción opcional" />
+          </label>
+        </div>
+
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Ubicación activa</span>
+        </label>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarModalUbic()"
+            [disabled]="savingUbic()"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="savingUbic()">
+            {{ savingUbic() ? 'Guardando...' : 'Guardar ubicación' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminar Ubicación (Soft Delete) -->
+@if (ubicAEliminar(); as target) {
+  <div class="modal-backdrop" (click)="cancelarEliminarUbicacion()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Eliminar ubicación</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cancelarEliminarUbicacion()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar la ubicación <strong>{{ target.nombre }}</strong>? Se aplicará
+        eliminación lógica (soft delete).
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarEliminarUbicacion()"
+          [disabled]="savingUbic()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarEliminarUbicacion()"
+          [disabled]="savingUbic()"
+        >
+          {{ savingUbic() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
 
 <!-- Modal confirmar cambio de key -->
 @if (confirmRegenerarAbierto()) {

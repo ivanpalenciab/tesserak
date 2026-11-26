@@ -12,6 +12,7 @@ import (
 
 	"tesserak/backend/internal/consecutivos"
 	"tesserak/backend/internal/httpx"
+	"tesserak/backend/internal/inventario"
 )
 
 const (
@@ -105,6 +106,29 @@ func (s *Service) Crear(ctx context.Context, empresaID, sucursalDefaultID int32,
 		}
 		if err := tx.CreateDetalles(ctx, detalles); err != nil {
 			return err
+		}
+
+		if c.Estado == EstadoRegistrada || c.Estado == EstadoPagada {
+			lineasInv := make([]inventario.EntradaCompraLinea, 0, len(detalles))
+			for _, d := range detalles {
+				lineasInv = append(lineasInv, inventario.EntradaCompraLinea{
+					ArticuloID:    d.ArticuloID,
+					Cantidad:      d.Cantidad,
+					CostoUnitario: d.CostoUnitario,
+				})
+			}
+			if err := inventario.RegistrarEntradaCompraTx(ctx, tx.DB(), inventario.EntradaCompraParams{
+				EmpresaID:     empresaID,
+				SucursalID:    c.SucursalID,
+				UsuarioID:     usuarioID,
+				CompraID:      c.ID,
+				Consecutivo:   c.Consecutivo,
+				Fecha:         c.FechaCompra,
+				Observaciones: c.Observaciones,
+				Detalles:      lineasInv,
+			}); err != nil {
+				return err
+			}
 		}
 
 		creada, err = tx.FindByID(ctx, empresaID, c.ID)
@@ -274,7 +298,32 @@ func (s *Service) Actualizar(ctx context.Context, empresaID int32, id int64, req
 		}
 
 		actualizada, err = tx.FindByID(ctx, empresaID, id)
-		return err
+		if err != nil {
+			return err
+		}
+		if actualizada.Estado == EstadoRegistrada || actualizada.Estado == EstadoPagada {
+			lineasInv := make([]inventario.EntradaCompraLinea, 0, len(actualizada.Detalles))
+			for _, d := range actualizada.Detalles {
+				lineasInv = append(lineasInv, inventario.EntradaCompraLinea{
+					ArticuloID:    d.ArticuloID,
+					Cantidad:      d.Cantidad,
+					CostoUnitario: d.CostoUnitario,
+				})
+			}
+			if err := inventario.RegistrarEntradaCompraTx(ctx, tx.DB(), inventario.EntradaCompraParams{
+				EmpresaID:     empresaID,
+				SucursalID:    actualizada.SucursalID,
+				UsuarioID:     actualizada.UsuarioID,
+				CompraID:      actualizada.ID,
+				Consecutivo:   actualizada.Consecutivo,
+				Fecha:         actualizada.FechaCompra,
+				Observaciones: actualizada.Observaciones,
+				Detalles:      lineasInv,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, mapError(err)

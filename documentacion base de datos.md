@@ -177,15 +177,15 @@ Permite gestionar múltiples esquemas comerciales de precios por empresa (genera
 | `created_at` | `TIMESTAMPTZ` | — | Fecha de creación (UTC) |
 | `updated_at` | `TIMESTAMPTZ` | — | Fecha de última actualización (UTC) |
 
-### 3.8 Inventario y Bodegas
+### 3.8 Inventario y Bodegas (prefijo `inv_`)
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
-| `ubicaciones` | Diseñada | Bodegas, estantes o zonas físicas dentro de una sucursal. | **Jerarquía física (Sucursal → Ubicación)**. |
-| `tipos_movimiento_inventario` | Diseñada | Catálogo de tipos de movimiento (Entrada, Salida, Traslado, Ajuste). | **Lookup / Catálogo**. |
-| `documento_inventario` | Diseñada | Cabecera de un movimiento de inventario (consecutivo, fecha, tercero, motivo, usuario, sucursal y referencia polimórfica `documento_origen_tipo` + `documento_origen_id`). | **Header–Detail + Referencia polimórfica**. |
-| `movimiento_inventario_detalle` | Diseñada | Líneas de cada documento de inventario con producto, ubicación origen/destino, cantidad, costo unitario y moneda. | **Header–Detail + Ledger de inventario (Kardex)**. |
-| `inventario_stock` | Diseñada | Saldo actual y costo promedio ponderado por `empresa_producto_id` y `ubicacion_id`. | **Materialized Balance / Snapshot de existencias**. |
+| `inv_ubicaciones` | Implementada (`000017`) | Bodegas, estantes o zonas físicas dentro de una sucursal (`codigo` único por empresa, `nombre`, `descripcion`, `activo`, `deleted_at`). | **Jerarquía física (Sucursal → Ubicación) + Multi-tenant + Soft Delete**. |
+| `inv_tipos_movimiento` | Implementada (`000017`) | Catálogo global con semilla de tipos de movimiento y su naturaleza (`ENTRADA`, `SALIDA`, `TRASLADO`): ajustes positivos/negativos, pérdidas, averías, devoluciones a proveedor, devoluciones de clientes, entradas por compra, salidas por venta y traslados. | **Lookup / Catálogo con semilla**. |
+| `inv_documentos` | Implementada (`000017`) | Cabecera de un movimiento de inventario (`consecutivo` autogenerado, `fecha`, `tercero_id`, `motivo`, `observaciones`, `usuario_id`, `sucursal_id`, `estado` y referencia polimórfica `documento_origen_tipo` + `documento_origen_id`). | **Header–Detail + Referencia polimórfica + Multi-tenant**. |
+| `inv_movimientos_detalle` | Implementada (`000017`) | Líneas de cada documento de inventario con `articulo_id`, `ubicacion_origen_id`, `ubicacion_destino_id`, `cantidad` y `costo_unitario`. | **Header–Detail + Ledger de inventario (Kardex)**. |
+| `inv_stock` | Implementada (`000017`) | Saldo actual (`cantidad >= 0`) y `costo_promedio` ponderado por `articulo_id` y `ubicacion_id`, con FKs compuestas a `(articulo_id, empresa_id)` y `(ubicacion_id, empresa_id)`. | **Materialized Balance / Snapshot de existencias**. |
 
 ### 3.9 Ventas y Compras
 

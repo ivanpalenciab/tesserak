@@ -3,8 +3,9 @@ package consecutivos
 import "time"
 
 const (
-	TipoCompra = "COMPRA"
-	TipoVenta  = "VENTA"
+	TipoCompra     = "COMPRA"
+	TipoVenta      = "VENTA"
+	TipoInventario = "INVENTARIO"
 
 	FrecuenciaNunca   = "NUNCA"
 	FrecuenciaAnual   = "ANUAL"
