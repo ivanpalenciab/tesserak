@@ -1,0 +1,425 @@
+<section class="terceros-page">
+  <header class="page-header">
+    <div>
+      <h1>Terceros</h1>
+      <p class="subtitle">
+        Administra los clientes, proveedores y empleados registrados en tu empresa.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="btn-secondary"
+        (click)="cargarTerceros()"
+        [disabled]="loadingTerceros()"
+      >
+        {{ loadingTerceros() ? 'Actualizando...' : 'Actualizar' }}
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirNuevoTercero()">
+        + Nuevo tercero
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <section class="filters-panel" aria-label="Filtros de terceros">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTexto()"
+        (input)="onBuscarTercero($any($event.target).value)"
+        placeholder="Buscar por identificación, razón social, correo o teléfono..."
+        aria-label="Buscar terceros"
+      />
+    </div>
+
+    <select
+      [value]="filtroRolId() ?? ''"
+      (change)="onFiltroRol($any($event.target).value)"
+      aria-label="Filtrar por rol"
+    >
+      <option value="">Todos los roles</option>
+      @for (rol of rolesDisponibles(); track rol.id) {
+        <option [value]="rol.id">{{ rol.nombre_rol }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroTipoId()"
+      (change)="onFiltroTipoId($any($event.target).value)"
+      aria-label="Filtrar por tipo de identificación"
+    >
+      <option value="">Todos los documentos</option>
+      @for (t of tiposIdentificacion; track t.value) {
+        <option [value]="t.value">{{ t.label }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroNaturaleza()"
+      (change)="onFiltroNaturaleza($any($event.target).value)"
+      aria-label="Filtrar por naturaleza jurídica"
+    >
+      <option value="">Todas las naturalezas</option>
+      @for (n of naturalezasJuridicas; track n.value) {
+        <option [value]="n.value">{{ n.label }}</option>
+      }
+    </select>
+
+    <select
+      [value]="filtroEstado()"
+      (change)="onFiltroEstado($any($event.target).value)"
+      aria-label="Filtrar por estado"
+    >
+      <option value="todos">Todos los estados</option>
+      <option value="activos">Activos</option>
+      <option value="inactivos">Inactivos</option>
+    </select>
+
+    @if (hayFiltrosTerceros()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltrosTerceros()">Limpiar</button>
+    }
+  </section>
+
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>
+        Mostrando <strong>{{ terceros().length }}</strong> de
+        <strong>{{ totalTerceros() }}</strong> terceros
+      </span>
+    </div>
+
+    @if (loadingTerceros()) {
+      <div class="empty-box">Cargando terceros...</div>
+    } @else if (terceros().length === 0) {
+      <div class="empty-box">
+        @if (hayFiltrosTerceros()) {
+          <p>No se encontraron terceros con los filtros aplicados.</p>
+          <button type="button" class="btn-secondary" (click)="limpiarFiltrosTerceros()">
+            Ver todos los terceros
+          </button>
+        } @else {
+          <p>Aún no hay terceros registrados para tu empresa.</p>
+          <button type="button" class="btn-primary" (click)="abrirNuevoTercero()">
+            Registrar primer tercero
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Identificación</th>
+              <th>Razón social / Nombre</th>
+              <th>Roles</th>
+              <th>Naturaleza</th>
+              <th>Contacto</th>
+              <th>Estado</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of terceros(); track t.id) {
+              <tr>
+                <td class="nowrap">
+                  <span class="sku-pill">{{ t.tipo_identificacion }} {{ t.numero_identificacion }}</span>
+                </td>
+
+                <td>
+                  <div class="cell-title">{{ t.razon_social }}</div>
+                  @if (t.direccion) {
+                    <div class="cell-sub">{{ t.direccion }}</div>
+                  }
+                </td>
+
+                <td>
+                  <div class="roles-badges">
+                    @for (r of t.roles; track r.rol_id) {
+                      <span class="rol-badge" [attr.data-rol]="r.codigo">
+                        {{ r.nombre_rol }}
+                      </span>
+                    } @empty {
+                      <span class="muted">Sin roles</span>
+                    }
+                  </div>
+                </td>
+
+                <td class="nowrap">
+                  <span class="tipo-badge" [attr.data-nat]="t.naturaleza_juridica">
+                    {{ etiquetaNaturaleza(t.naturaleza_juridica) }}
+                  </span>
+                </td>
+
+                <td>
+                  @if (t.email) {
+                    <div>{{ t.email }}</div>
+                  }
+                  @if (t.telefono) {
+                    <div class="cell-sub">{{ t.telefono }}</div>
+                  }
+                  @if (!t.email && !t.telefono) {
+                    <span class="muted">—</span>
+                  }
+                </td>
+
+                <td>
+                  <span
+                    class="status-badge"
+                    [class.active]="t.activo"
+                    [class.inactive]="!t.activo"
+                  >
+                    {{ t.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="abrirEditarTercero(t)">
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [class.success]="!t.activo"
+                      [class.warning]="t.activo"
+                      (click)="toggleActivoTercero(t)"
+                    >
+                      {{ t.activo ? 'Desactivar' : 'Activar' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon danger"
+                      (click)="solicitarEliminarTercero(t)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPaginas() > 1) {
+        <div class="pagination">
+          <span class="page-info">Página {{ page() }} de {{ totalPaginas() }}</span>
+          <div class="row-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="irPagina(page() - 1)"
+              [disabled]="page() <= 1"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="irPagina(page() + 1)"
+              [disabled]="page() >= totalPaginas()"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </section>
+</section>
+
+<!-- Modal Crear / Editar Tercero -->
+@if (modalTerceroAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalTercero()">
+    <div class="modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>{{ editandoTercero() ? 'Editar tercero' : 'Nuevo tercero' }}</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cerrarModalTercero()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="formTercero" (ngSubmit)="guardarTercero()">
+        @if (modalTerceroError(); as err) {
+          <div class="alert error" role="alert">{{ err }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Tipo de identificación *</span>
+            <select formControlName="tipo_identificacion">
+              @for (t of tiposIdentificacion; track t.value) {
+                <option [value]="t.value">{{ t.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Número de identificación *</span>
+            <input
+              type="text"
+              formControlName="numero_identificacion"
+              placeholder="Ej: 900123456-7"
+            />
+            @if (
+              formTercero.controls.numero_identificacion.touched &&
+              formTercero.controls.numero_identificacion.invalid
+            ) {
+              <small class="field-error">Ingresa un número de identificación válido.</small>
+            }
+          </label>
+
+          <label class="field full">
+            <span>Razón social / Nombre completo *</span>
+            <input
+              type="text"
+              formControlName="razon_social"
+              placeholder="Ej: Distribuidora Nacional SAS o Juan Pérez"
+            />
+            @if (
+              formTercero.controls.razon_social.touched &&
+              formTercero.controls.razon_social.invalid
+            ) {
+              <small class="field-error">La razón social o nombre es obligatoria.</small>
+            }
+          </label>
+
+          <!-- Selector múltiple de roles establecidos en la BD -->
+          <div class="field full">
+            <span>Roles del tercero * (puedes seleccionar uno o varios)</span>
+            <div class="roles-picker">
+              @for (rol of rolesDisponibles(); track rol.id) {
+                <button
+                  type="button"
+                  class="rol-chip"
+                  [class.selected]="tieneRolSeleccionado(rol.id)"
+                  (click)="toggleRolSeleccionado(rol.id)"
+                >
+                  <span class="rol-check">{{ tieneRolSeleccionado(rol.id) ? '✓' : '+' }}</span>
+                  <span>{{ rol.nombre_rol }}</span>
+                </button>
+              }
+            </div>
+            @if (rolesTouched() && rolesSeleccionados().length === 0) {
+              <small class="field-error">Selecciona al menos un rol para el tercero.</small>
+            }
+          </div>
+
+          <label class="field">
+            <span>Naturaleza jurídica *</span>
+            <select formControlName="naturaleza_juridica">
+              @for (n of naturalezasJuridicas; track n.value) {
+                <option [value]="n.value">{{ n.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Teléfono</span>
+            <input type="text" formControlName="telefono" placeholder="Ej: +57 300 123 4567" />
+          </label>
+
+          <label class="field full">
+            <span>Correo electrónico</span>
+            <input type="email" formControlName="email" placeholder="contacto@empresa.com" />
+            @if (formTercero.controls.email.touched && formTercero.controls.email.invalid) {
+              <small class="field-error">Ingresa un correo electrónico válido.</small>
+            }
+          </label>
+
+          <label class="field full">
+            <span>Dirección</span>
+            <input type="text" formControlName="direccion" placeholder="Calle 100 # 10-20" />
+          </label>
+        </div>
+
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Tercero activo</span>
+        </label>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarModalTercero()"
+            [disabled]="savingTercero()"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="savingTercero()">
+            {{
+              savingTercero()
+                ? 'Guardando...'
+                : editandoTercero()
+                  ? 'Guardar cambios'
+                  : 'Registrar tercero'
+            }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminar Tercero -->
+@if (terceroAEliminar(); as target) {
+  <div class="modal-backdrop" (click)="cancelarEliminarTercero()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Eliminar tercero</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cancelarEliminarTercero()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar a <strong>{{ target.razon_social }}</strong> ({{
+          target.tipo_identificacion
+        }}
+        {{ target.numero_identificacion }})? Se aplicará eliminación lógica (soft delete).
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarEliminarTercero()"
+          [disabled]="savingTercero()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarEliminarTercero()"
+          [disabled]="savingTercero()"
+        >
+          {{ savingTercero() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

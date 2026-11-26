@@ -14,12 +14,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"tesserak/backend/internal/auth"
+	"tesserak/backend/internal/compras"
 	"tesserak/backend/internal/config"
+	"tesserak/backend/internal/consecutivos"
 	"tesserak/backend/internal/crm"
 	"tesserak/backend/internal/database"
 	"tesserak/backend/internal/empresas"
 	"tesserak/backend/internal/precios"
 	"tesserak/backend/internal/productos"
+	"tesserak/backend/internal/terceros"
 	"tesserak/backend/internal/usuarios"
 )
 
@@ -74,6 +77,18 @@ func main() {
 	).RegisterRoutes(api)
 	precios.NewHandler(
 		precios.NewService(precios.NewRepository(db)),
+		auth.RequireAuth(cfg.JWTSecret),
+	).RegisterRoutes(api)
+	compras.NewHandler(
+		compras.NewService(compras.NewRepository(db)),
+		auth.RequireAuth(cfg.JWTSecret),
+	).RegisterRoutes(api)
+	terceros.NewHandler(
+		terceros.NewService(terceros.NewRepository(db)),
+		auth.RequireAuth(cfg.JWTSecret),
+	).RegisterRoutes(api)
+	consecutivos.NewHandler(
+		consecutivos.NewService(consecutivos.NewRepository(db)),
 		auth.RequireAuth(cfg.JWTSecret),
 	).RegisterRoutes(api)
 

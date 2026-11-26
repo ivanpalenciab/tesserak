@@ -13,13 +13,12 @@ Este documento describe cómo está diseñada y construida la base de datos de *
 
 | Patrón | Dónde se aplica | Qué resuelve |
 |---|---|---|
-| **Multi-tenant con discriminador (`empresa_id`)** | `sucursales`, `usuarios`, `crm_*`, `articulos`, `listas_precios`, `ventas`, `compras`, `lealtad_*`, `tercero_empresa` | Múltiples empresas comparten la misma base de datos con aislamiento lógico por `empresa_id`. |
-| **Integridad multi-tenant por FK compuesta** | `usuarios (sucursal_id, empresa_id)`, `crm_leads (sucursal_id/origen_id/estado_id/motivo_descarte_id, empresa_id)` | Impide a nivel de motor que un registro de la empresa A referencie una sucursal, origen, estado o motivo de la empresa B. |
-| **Soft Delete + Índices únicos parciales** | `empresas`, `sucursales`, `usuarios`, `crm_*`, `articulos`, `listas_precios` | `deleted_at TIMESTAMPTZ` conserva el historial sin borrar físicamente. Los índices `UNIQUE (...) WHERE deleted_at IS NULL` permiten reutilizar emails, nombres de usuario o NITs de registros eliminados. |
-| **Catálogo maestro + Vinculación por empresa** | `tercero_maestro` → `tercero_empresa` | Evita duplicar información base de terceros entre tenants, permitiendo configuración propia por empresa. |
+| **Multi-tenant con discriminador (`empresa_id`)** | `sucursales`, `usuarios`, `crm_*`, `tercero_maestro`, `articulos`, `listas_precios`, `com_compras`, `ventas`, `lealtad_*` | Múltiples empresas comparten la misma base de datos con aislamiento lógico por `empresa_id`. |
+| **Integridad multi-tenant por FK compuesta** | `usuarios (sucursal_id, empresa_id)`, `crm_leads (sucursal_id/origen_id/estado_id/motivo_descarte_id, empresa_id)`, `com_compras (sucursal_id, empresa_id)` | Impide a nivel de motor que un registro de la empresa A referencie una sucursal, origen, estado o motivo de la empresa B. |
+| **Soft Delete + Índices únicos parciales** | `empresas`, `sucursales`, `usuarios`, `crm_*`, `tercero_maestro`, `roles_tercero`, `articulos`, `listas_precios`, `com_compras` | `deleted_at TIMESTAMPTZ` conserva el historial sin borrar físicamente. Los índices `UNIQUE (...) WHERE deleted_at IS NULL` permiten reutilizar emails, nombres de usuario, identificaciones, consecutivos o NITs de registros eliminados. |
 | **Supertipo–Subtipo para Artículos (Productos y Servicios)** | `articulos` → `productos` / `servicios` | Aísla los artículos por empresa (`empresa_id`) y separa los atributos comunes (`codigo`, `nombre`, `unidad_medida_id`, `categoria_id`, `grupo_impuesto_id`, `marca_id` opcional) de las extensiones 1:1 para productos físicos e inventario vs. servicios (duración en horas, modalidad, programación). |
-| **Party / Role (Supertipo–Subtipo / Class Table Inheritance)** | `tercero_maestro` → `tercero_empresa` → `tercero_empresa_roles` → `clientes` / `proveedores` / `empleados` | Una misma persona o empresa puede ser simultáneamente cliente, proveedor y empleado sin duplicar sus datos de identidad. |
-| **Header–Detail (Cabecera–Detalle)** | `listas_precios` / `lista_precios_detalle`, `ventas` / `ventas_detalle`, `compras` / `compras_detalle`, `documento_inventario` / `movimiento_inventario_detalle` | Separa metadatos y totales del documento (o cabecera comercial) de sus líneas de ítems. |
+| **Party / Role (Supertipo–Subtipo / Class Table Inheritance)** | `tercero_maestro` → `tercero_empresa_roles` → `clientes` / `proveedores` / `empleados` | Cada empresa gestiona directamente sus terceros (`tercero_maestro.empresa_id`) y una misma persona o empresa puede ser simultáneamente cliente, proveedor y empleado sin duplicar sus datos de identidad. |
+| **Header–Detail (Cabecera–Detalle)** | `listas_precios` / `lista_precios_detalle`, `com_compras` / `com_compras_detalle`, `ventas` / `ventas_detalle`, `documento_inventario` / `movimiento_inventario_detalle` | Separa metadatos y totales del documento (o cabecera comercial) de sus líneas de ítems. |
 | **Ledger (Libro mayor inmutable) + Saldo materializado** | `lealtad_transacciones` + `lealtad_cuentas.saldo_puntos`; `movimiento_inventario_detalle` + `inventario_stock` | Mantiene trazabilidad completa de cada movimiento mientras conserva un saldo/stock actualizado para lecturas rápidas. |
 | **RBAC (Control de acceso basado en roles)** | `usuarios` ↔ `usuario_roles` ↔ `roles_sistema` ↔ `rol_permisos` ↔ `permisos` | Desacopla usuarios de permisos mediante roles asignables. |
 | **Feature Flags por tenant (Suscripción modular)** | `modulos` ↔ `modulo_empresa` | Permite activar o desactivar módulos funcionales por empresa. |
@@ -108,12 +107,13 @@ erDiagram
 
 ### 3.5 Terceros (Clientes, Proveedores y Empleados)
 
+> **Decisión arquitectónica (`000014`):** Los terceros se aíslan directamente por empresa mediante `tercero_maestro.empresa_id` (FK a `empresas`), eliminando la tabla intermedia `tercero_empresa`.
+
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
-| `tercero_maestro` | Diseñada | Registro único de identidad de una persona natural o jurídica (tipo/número de identificación, razón social, país, naturaleza jurídica). | **Party Pattern (Supertipo maestro compartido)**. |
-| `tercero_empresa` | Diseñada | Vincula un tercero del maestro con una empresa específica. | **Tabla puente N:M (Catálogo compartido → Tenant)**. |
-| `roles_tercero` | Diseñada | Catálogo de roles de negocio que puede tener un tercero (Cliente, Proveedor, Empleado). | **Catálogo de roles de negocio**. |
-| `tercero_empresa_roles` | Diseñada | Asigna roles concretos a un tercero dentro de una empresa. Es la referencia central que usan ventas, compras, lealtad y CRM. | **Party–Role Pattern**. |
+| `tercero_maestro` | Implementada (`000014`) | Registro de identidad de una persona natural o jurídica aislado por empresa (`empresa_id`, `tipo_identificacion`, `numero_identificacion` único por empresa, `razon_social`, `pais_id`, `naturaleza_juridica`, `email`, `telefono`, `direccion`, `activo`, `deleted_at`). | **Party Pattern multi-tenant + Soft Delete + Índice único parcial**. |
+| `roles_tercero` | Implementada (`000013`) | Catálogo de roles de negocio que puede tener un tercero (`codigo`, `nombre_rol`, `descripcion`, `activo`, `es_sistema`, `deleted_at`). Incluye semilla inicial de roles base protegidos: **`CLIENTE`** (*Cliente*), **`PROVEEDOR`** (*Proveedor*) y **`EMPLEADO`** (*Empleado*). | **Catálogo de roles de negocio + Semilla base + Soft Delete**. |
+| `tercero_empresa_roles` | Implementada (`000015`) | Asigna uno o varios roles concretos a un tercero (`tercero_id` → `tercero_maestro.id`, `rol_id` → `roles_tercero.id`, con `UNIQUE (tercero_id, rol_id)`). Es la referencia central que usan ventas, compras, lealtad y CRM. | **Party–Role Pattern (N:M)**. |
 | `clientes` | Diseñada | Datos específicos de un tercero con rol cliente (`limite_credito`, `condiciones_pago`, `fecha_registro`). | **Class Table Inheritance (Subtipo de rol)**. |
 | `proveedores` | Diseñada | Datos específicos de un tercero con rol proveedor (`evaluacion`). | **Class Table Inheritance (Subtipo de rol)**. |
 | `empleados` | Diseñada | Datos laborales de un tercero con rol empleado (`fecha_contratacion`, `salario`, `tipo_contrato_id`, `cargo_id`, `estado`). | **Class Table Inheritance (Subtipo de rol)**. |
@@ -193,8 +193,8 @@ Permite gestionar múltiples esquemas comerciales de precios por empresa (genera
 |---|---|---|---|
 | `ventas` | Diseñada | Cabecera de ventas (consecutivo, empresa, sucursal, cliente vía `tercero_empresa_rol_id`, vendedor, estado, subtotal, descuentos, impuestos y total). | **Header–Detail + Documento transaccional** (se anula por `estado`, no se borra). |
 | `ventas_detalle` | Diseñada | Ítems vendidos con cantidad, precio unitario, descuento, impuesto y total por línea. | **Header–Detail**. |
-| `compras` | Diseñada | Cabecera de compras a proveedores (consecutivo, factura del proveedor, fechas de compra y vencimiento, totales, usuario y sucursal). | **Header–Detail + Documento transaccional**. |
-| `compras_detalle` | Diseñada | Ítems comprados con cantidad, subtotal, impuesto y total. | **Header–Detail**. |
+| `com_compras` | Implementada (`000012`) | Cabecera de compras a proveedores (`consecutivo` generado automáticamente desde `secuencias_documento` si no se envía, único por empresa; `numero_factura_proveedor`, `tercero_empresa_rol_id`, `proveedor_nombre`, `moneda_id`, `estado`, fechas de compra y vencimiento, `subtotal`, `total_iva`, `total`, `observaciones`, `usuario_id`, `sucursal_id` y `deleted_at`). | **Header–Detail + Multi-tenant con FK compuesta + Soft Delete**. |
+| `com_compras_detalle` | Implementada (`000012`) | Ítems comprados vinculados a `com_compras` y `articulos` (`articulo_id`, `descripcion`, `cantidad`, `costo_unitario`, `subtotal`, `impuesto`, `total`). | **Header–Detail**. |
 
 ### 3.10 Programa de Lealtad
 
@@ -205,6 +205,42 @@ Permite gestionar múltiples esquemas comerciales de precios por empresa (genera
 | `lealtad_cuentas` | Diseñada | Cuenta de puntos de un cliente dentro de un programa, con `saldo_puntos` materializado. | **Materialized Balance**. |
 | `lealtad_transacciones` | Diseñada | Historial inmutable de acumulación, ajuste o vencimiento de puntos con `saldo_posterior` y vínculo a la venta origen. | **Append-only Ledger (Libro mayor de puntos)**. |
 | `lealtad_redenciones` | Diseñada | Registro de canje de puntos por descuentos aplicados en una venta. | **Documento transaccional vinculado a cuenta y venta**. |
+
+### 3.11 Secuencias y Consecutivos de Documentos
+
+Permite emitir consecutivos automáticos y sin duplicados por empresa y tipo de documento (compras, ventas, cotizaciones, etc.), con prefijo configurable por empresa, relleno numérico y reinicio periódico opcional (`NUNCA`, `ANUAL`, `MENSUAL`).
+
+| Tabla | Estado | Para qué sirve | Patrón de diseño |
+|---|---|---|---|
+| `tipos_documento` | Implementada (`000016`) | Catálogo global de tipos de documento que utilizan consecutivos. Semilla inicial: `COMPRA` (prefijo por defecto `COM`) y `VENTA` (prefijo por defecto `VEN`). | **Lookup / Catálogo de referencia global**. |
+| `secuencias_documento` | Implementada (`000016`) | Contador y configuración de consecutivos por empresa y tipo de documento (`UNIQUE (empresa_id, tipo_documento_id)`). La emisión usa bloqueo pesimista `SELECT ... FOR UPDATE` dentro de la transacción del documento. | **Secuencia Atómica Multi-tenant + Bloqueo Pesimista (`FOR UPDATE`) + Reinicio Periódico**. |
+
+#### Estructura de `tipos_documento`
+
+| Campo | Tipo | Clave | Descripción |
+|---|---|---|---|
+| `id` | `INT` | PK | Identificador |
+| `codigo` | `VARCHAR(20)` | UQ | Código único (`COMPRA`, `VENTA`, `COT`, etc.) |
+| `nombre` | `VARCHAR(100)` | — | Nombre legible (`Compras`, `Ventas`) |
+| `descripcion` | `VARCHAR(255)` | — | Descripción del documento |
+| `prefijo_defecto` | `VARCHAR(10)` | — | Prefijo inicial sugerido (`COM`, `VEN`) |
+| `activo` | `BOOLEAN` | — | Estado del tipo de documento |
+| `created_at` / `updated_at` | `TIMESTAMPTZ` | — | Auditoría temporal (UTC) |
+
+#### Estructura de `secuencias_documento`
+
+| Campo | Tipo | Clave | Descripción |
+|---|---|---|---|
+| `id` | `BIGINT` | PK | Identificador |
+| `empresa_id` | `INT` | FK → `empresas.id`, UQ | Empresa propietaria de la secuencia |
+| `tipo_documento_id` | `INT` | FK → `tipos_documento.id`, UQ | Tipo de documento (único junto a `empresa_id`) |
+| `prefijo` | `VARCHAR(10)` | — | Prefijo configurable por empresa (`COM`, `VEN`, `COT`, etc.) |
+| `siguiente_numero` | `BIGINT` | — | Siguiente número disponible (`>= 1`) |
+| `longitud_relleno` | `SMALLINT` | — | Cantidad de dígitos con ceros a la izquierda (por defecto `6`, ej. `COM-000001`) |
+| `frecuencia_reinicio` | `VARCHAR(20)` | — | `NUNCA`, `ANUAL` o `MENSUAL` |
+| `clave_periodo` | `VARCHAR(20)` (null) | — | Periodo actual (`NULL`, `YYYY` o `YYYY-MM`) |
+| `activo` | `BOOLEAN` | — | Estado de la secuencia |
+| `created_at` / `updated_at` | `TIMESTAMPTZ` | — | Auditoría temporal (UTC) |
 
 ---
 

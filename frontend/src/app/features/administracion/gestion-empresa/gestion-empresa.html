@@ -1,0 +1,217 @@
+<section class="empresa-page">
+  <header class="page-header">
+    <div>
+      <h1>Gestión de empresa</h1>
+      @if (empresa(); as emp) {
+        <p class="subtitle">
+          <strong>{{ emp.razon_social }}</strong> · NIT/ID: {{ emp.identificador_fiscal }} —
+          Configura los prefijos de consecutivos y la key de acceso de tu usuario.
+        </p>
+      } @else {
+        <p class="subtitle">
+          Configura los prefijos de compras y ventas de tu empresa y administra la key de tu
+          usuario.
+        </p>
+      }
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarDatos()" [disabled]="loading()">
+        {{ loading() ? 'Actualizando...' : 'Actualizar' }}
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  @if (loading()) {
+    <div class="panel empty-box">Cargando configuración de empresa...</div>
+  } @else {
+    <!-- Sección 1: Prefijos de Compras y Ventas -->
+    <section class="panel" aria-label="Prefijos de documentos">
+      <div class="panel-header">
+        <div>
+          <h2>Prefijos de consecutivos (Compras y Ventas)</h2>
+          <p class="subtitle">
+            Personaliza el prefijo, el siguiente número, el relleno de ceros y la frecuencia de
+            reinicio de los consecutivos automáticos de tu empresa.
+          </p>
+        </div>
+      </div>
+
+      @if (secuenciasItems().length === 0) {
+        <div class="empty-box">
+          No hay tipos de documento configurados en el sistema para asignar prefijos.
+        </div>
+      } @else {
+        <div class="secuencias-grid">
+          @for (item of secuenciasItems(); track item.tipo.id) {
+            <form
+              class="secuencia-card"
+              [formGroup]="item.form"
+              (ngSubmit)="guardarSecuencia(item)"
+            >
+              <div class="secuencia-card-top">
+                <div>
+                  <h3>{{ item.tipo.nombre }}</h3>
+                  <span class="code-pill">{{ item.tipo.codigo }}</span>
+                </div>
+                <div class="preview-box">
+                  <span class="preview-label">Próximo consecutivo</span>
+                  <strong class="preview-value">{{ vistaPrevia(item) }}</strong>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Prefijo *</span>
+                  <input
+                    type="text"
+                    formControlName="prefijo"
+                    maxlength="10"
+                    placeholder="Ej: COM, FAC"
+                  />
+                  @if (
+                    item.form.controls['prefijo'].touched &&
+                    item.form.controls['prefijo'].invalid
+                  ) {
+                    <small class="field-error">Ingresa un prefijo (1 a 10 caracteres).</small>
+                  }
+                </label>
+
+                <label class="field">
+                  <span>Siguiente número *</span>
+                  <input type="number" min="1" formControlName="siguiente_numero" />
+                </label>
+
+                <label class="field">
+                  <span>Longitud relleno (dígitos) *</span>
+                  <input type="number" min="1" max="20" formControlName="longitud_relleno" />
+                </label>
+
+                <label class="field">
+                  <span>Frecuencia de reinicio *</span>
+                  <select formControlName="frecuencia_reinicio">
+                    @for (f of frecuencias; track f.value) {
+                      <option [value]="f.value">{{ f.label }}</option>
+                    }
+                  </select>
+                </label>
+              </div>
+
+              <div class="secuencia-card-footer">
+                <label class="checkbox-field">
+                  <input type="checkbox" formControlName="activo" />
+                  <span>Secuencia activa</span>
+                </label>
+
+                <button type="submit" class="btn-primary" [disabled]="item.saving">
+                  {{ item.saving ? 'Guardando...' : 'Guardar prefijo' }}
+                </button>
+              </div>
+            </form>
+          }
+        </div>
+      }
+    </section>
+
+    <!-- Sección 2: Key del usuario -->
+    <section class="panel" aria-label="Key del usuario">
+      <div class="panel-header">
+        <div>
+          <h2>Key de usuario</h2>
+          <p class="subtitle">
+            Identificador único (UUID v4) asignado a tu usuario para integraciones y
+            identificación externa. Puedes visualizarla, copiarla o generar una nueva.
+          </p>
+        </div>
+      </div>
+
+      @if (usuarioDetalle(); as u) {
+        <div class="key-body">
+          <div class="user-summary">
+            <span class="user-label">Usuario actual:</span>
+            <strong>{{ u.nombres }} {{ u.apellidos }}</strong>
+            <span class="muted">(&#64;{{ u.nombre_usuario }} · {{ u.email }})</span>
+          </div>
+
+          <div class="key-box">
+            <code class="key-value">{{ keyEnmascarada(u.key) }}</code>
+
+            <div class="key-actions">
+              <button type="button" class="btn-secondary" (click)="toggleVerKey()">
+                {{ keyVisible() ? 'Ocultar' : 'Mostrar' }}
+              </button>
+              <button type="button" class="btn-secondary" (click)="copiarKey()">
+                {{ keyCopiada() ? '¡Copiada!' : 'Copiar key' }}
+              </button>
+              <button
+                type="button"
+                class="btn-warning"
+                (click)="abrirConfirmarRegenerar()"
+                [disabled]="regenerandoKey()"
+              >
+                Cambiar key
+              </button>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <div class="empty-box">No se pudo cargar la información del usuario actual.</div>
+      }
+    </section>
+  }
+</section>
+
+<!-- Modal confirmar cambio de key -->
+@if (confirmRegenerarAbierto()) {
+  <div class="modal-backdrop" (click)="cancelarRegenerar()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Cambiar key de usuario</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cancelarRegenerar()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas generar una nueva <strong>key (UUID)</strong> para tu usuario? La key
+        anterior será reemplazada de inmediato y cualquier integración que la utilice deberá
+        actualizarse.
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarRegenerar()"
+          [disabled]="regenerandoKey()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarRegenerarKey()"
+          [disabled]="regenerandoKey()"
+        >
+          {{ regenerandoKey() ? 'Cambiando...' : 'Sí, cambiar key' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -79,7 +79,7 @@ export class MainLayoutComponent {
     {
       title: 'Operación',
       items: [
-        { label: 'Terceros', icon: 'contacts', disabled: true, badge: 'Pronto' },
+        { label: 'Terceros', route: '/terceros', icon: 'contacts' },
         {
           label: 'Productos',
           icon: 'products',
@@ -90,13 +90,14 @@ export class MainLayoutComponent {
             { label: 'Configuración', route: '/productos/configuracion' },
           ],
         },
+        { label: 'Compras', route: '/compras', icon: 'purchases' },
         { label: 'Inventario', icon: 'inventory', disabled: true, badge: 'Pronto' },
       ],
     },
     {
       title: 'Administración',
       items: [
-        { label: 'Empresas', route: '/empresas', icon: 'company', badge: 'API' },
+        { label: 'Gestión de empresa', route: '/gestion-empresa', icon: 'company' },
         { label: 'Usuarios', route: '/usuarios', icon: 'users', badge: 'API' },
       ],
     },

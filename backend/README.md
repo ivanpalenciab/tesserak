@@ -10,7 +10,11 @@ backend/
 │   ├── database/                # conexión GORM y runner de migraciones
 │   ├── httpx/                   # errores y validación HTTP comunes
 │   ├── crm/                     # módulo CRM: catálogos, leads, actividades, intereses y resumen
+│   ├── compras/                 # módulo compras: com_compras y com_compras_detalle
 │   ├── empresas/                # módulo empresas: model, dto, repository, service, handler
+│   ├── precios/                 # módulo listas de precios: listas_precios y lista_precios_detalle
+│   ├── productos/               # módulo artículos: productos, servicios y catálogos
+│   ├── terceros/                # módulo terceros: roles_tercero (semilla: CLIENTE, PROVEEDOR, EMPLEADO)
 │   └── usuarios/                # módulo usuarios: model, dto, repository, service, handler
 ├── migrations/                  # SQL versionado (golang-migrate), embebido en el binario
 └── docker-compose.yml           # PostgreSQL local
@@ -128,4 +132,44 @@ curl -X POST http://localhost:8080/api/v1/usuarios -H "Content-Type: application
 | GET | `/api/v1/crm/actividades` | Agenda global (`empresa_id`, `usuario_id`, `tipo_actividad`, `estado`, `solo_vencidas=true`) |
 | PATCH / DELETE | `/api/v1/crm/actividades/:id` | Actualizar o eliminar actividad |
 | POST / GET / DELETE | `/api/v1/crm/leads/:id/intereses` (`/:interesId`) | Gestionar productos/categorías de interés del lead |
+
+## API de Terceros — Roles (`/api/v1/terceros/roles`)
+
+Todos los endpoints requieren autenticación JWT (`Authorization: Bearer <token>`).
+
+La migración `000013_init_roles_tercero` inserta automáticamente los roles base del sistema (`es_sistema = true`):
+- **`CLIENTE`** — *Cliente*
+- **`PROVEEDOR`** — *Proveedor*
+- **`EMPLEADO`** — *Empleado*
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/v1/terceros/roles` | Crear un rol de tercero personalizado (`codigo`, `nombre_rol`, `descripcion`, `activo`) |
+| GET | `/api/v1/terceros/roles` | Listar roles de tercero. Filtros: `activo`, `q` |
+| GET | `/api/v1/terceros/roles/:id` | Obtener un rol por id |
+| PATCH | `/api/v1/terceros/roles/:id` | Actualización parcial de rol |
+| DELETE | `/api/v1/terceros/roles/:id` | **Soft delete** (`deleted_at = now()`), responde 204 |
+
+### Reglas de negocio (roles de tercero)
+- `codigo` (normalizado a mayúsculas) y `nombre_rol` son únicos entre roles activos no eliminados → `409 codigo_duplicado` / `409 nombre_duplicado`.
+- Los roles base del sistema (`CLIENTE`, `PROVEEDOR`, `EMPLEADO`, con `es_sistema = true`) están protegidos: no pueden eliminarse ni cambiar su `codigo` → `409 rol_sistema_protegido`.
+
+## API de Terceros — Maestro (`/api/v1/terceros`)
+
+Todos los endpoints requieren autenticación JWT (`Authorization: Bearer <token>`) y aíslan automáticamente los registros por `empresa_id` del token (`tercero_maestro.empresa_id`, sin tabla intermedia `tercero_empresa`).
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/v1/terceros` | Crear tercero (`tipo_identificacion`, `numero_identificacion`, `razon_social`, `naturaleza_juridica`, `pais_id`, `email`, `telefono`, `direccion`, `activo`) |
+| GET | `/api/v1/terceros` | Listar terceros paginados. Filtros: `tipo_identificacion`, `naturaleza_juridica`, `pais_id`, `activo`, `q`, `page`, `page_size` |
+| GET | `/api/v1/terceros/:id` | Obtener tercero por id |
+| PATCH | `/api/v1/terceros/:id` | Actualización parcial (soporta `limpiar_pais`) |
+| DELETE | `/api/v1/terceros/:id` | **Soft delete** (`deleted_at = now()`), responde 204 |
+
+### Reglas de negocio (terceros)
+- `tipo_identificacion` acepta `NIT`, `CC`, `CE`, `PASAPORTE`, `RUT`, `DNI`, `OTRO`.
+- `naturaleza_juridica` acepta `NATURAL` o `JURIDICA`.
+- La combinación `(empresa_id, tipo_identificacion, numero_identificacion)` es única entre terceros no eliminados → `409 identificacion_duplicada`.
+
+
 

@@ -171,6 +171,32 @@ func (s *Service) Eliminar(ctx context.Context, id int64) error {
 	return mapError(s.repo.SoftDelete(ctx, id))
 }
 
+// RegenerarKey asigna un nuevo UUID v4 en usuarios.key y devuelve el usuario actualizado.
+func (s *Service) RegenerarKey(ctx context.Context, id int64) (*UsuarioResponse, error) {
+	nuevaKey, err := newUUIDv4()
+	if err != nil {
+		return nil, err
+	}
+
+	var result *Usuario
+	err = s.repo.WithTx(ctx, func(tx *Repository) error {
+		u, err := tx.FindByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := tx.Update(ctx, u, map[string]any{"key": nuevaKey}); err != nil {
+			return err
+		}
+		result, err = tx.FindByID(ctx, id)
+		return err
+	})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	resp := toResponse(result)
+	return &resp, nil
+}
+
 // ---------------------------------------------------------------------
 
 func normalizarEmail(e string) string {

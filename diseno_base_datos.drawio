@@ -1,6 +1,6 @@
 <mxfile host="Electron">
   <diagram name="diseño base de datos" id="9wXwJKZUDgRuZy63stRO">
-    <mxGraphModel dx="5509" dy="4605" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="2603" dy="2472" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -3611,7 +3611,9 @@
         <mxCell id="y-aTRuUOa8Dhaf-Hyz8a-3" edge="1" parent="1" source="vNfiomHS-DmuyVpYXxaY-18" style="edgeStyle=orthogonalEdgeStyle;fontSize=12;html=1;endArrow=ERmany;rounded=0;defaultLabelBackgroundColor=page;exitX=0;exitY=0.25;exitDx=0;exitDy=0;libavoidRouting=1;" target="vNfiomHS-DmuyVpYXxaY-247" value="">
           <mxGeometry height="100" relative="1" width="100" x="0.8388" as="geometry">
             <Array as="points">
-              <mxPoint x="2500" y="1650" />
+              <mxPoint x="2953" y="1650" />
+              <mxPoint x="2953" y="480" />
+              <mxPoint x="2500" y="480" />
               <mxPoint x="2500" y="43" />
             </Array>
             <mxPoint x="2980" y="690" as="sourcePoint" />

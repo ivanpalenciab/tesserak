@@ -147,15 +147,29 @@ export const routes: Routes = [
         ],
       },
       {
-        path: 'empresas',
+        path: 'terceros',
         loadComponent: () =>
-          import('./features/coming-soon/coming-soon').then((m) => m.ComingSoonComponent),
-        data: {
-          titulo: 'Gestión de Empresas',
-          descripcion:
-            'El backend CRUD de empresas está activo en /api/v1/empresas. Aquí agregaremos el listado, creación y edición de empresas.',
-        },
-        title: 'Empresas — Tesserak',
+          import('./features/terceros/terceros/terceros').then((m) => m.TercerosComponent),
+        title: 'Terceros — Tesserak',
+      },
+      {
+        path: 'compras',
+        loadComponent: () =>
+          import('./features/compras/compras/compras').then((m) => m.ComprasComponent),
+        title: 'Compras — Tesserak',
+      },
+      {
+        path: 'gestion-empresa',
+        loadComponent: () =>
+          import('./features/administracion/gestion-empresa/gestion-empresa').then(
+            (m) => m.GestionEmpresaComponent,
+          ),
+        title: 'Gestión de empresa — Tesserak',
+      },
+      {
+        path: 'empresas',
+        redirectTo: 'gestion-empresa',
+        pathMatch: 'full',
       },
       {
         path: 'usuarios',

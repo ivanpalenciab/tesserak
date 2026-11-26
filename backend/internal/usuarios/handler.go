@@ -25,6 +25,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	g.GET("", h.listar)
 	g.GET("/:id", h.obtener)
 	g.PATCH("/:id", h.actualizar)
+	g.POST("/:id/regenerar-key", h.regenerarKey)
 	g.DELETE("/:id", h.eliminar)
 }
 
@@ -86,6 +87,21 @@ func (h *Handler) actualizar(c *gin.Context) {
 		return
 	}
 	resp, err := h.svc.Actualizar(c.Request.Context(), id, req)
+	if err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// POST /usuarios/:id/regenerar-key
+func (h *Handler) regenerarKey(c *gin.Context) {
+	id, err := parseID(c)
+	if err != nil {
+		httpx.RespondError(c, err)
+		return
+	}
+	resp, err := h.svc.RegenerarKey(c.Request.Context(), id)
 	if err != nil {
 		httpx.RespondError(c, err)
 		return
