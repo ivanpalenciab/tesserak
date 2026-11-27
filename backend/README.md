@@ -6,16 +6,20 @@
 backend/
 ├── cmd/api/main.go              # punto de entrada (servidor HTTP + migraciones)
 ├── internal/
+│   ├── auth/                    # autenticación JWT HS256, bcrypt y middleware RequireAuth
 │   ├── config/                  # variables de entorno
+│   ├── consecutivos/            # secuencias automáticas configurables (COMPRA, VENTA, INVENTARIO)
 │   ├── database/                # conexión GORM y runner de migraciones
 │   ├── httpx/                   # errores y validación HTTP comunes
-│   ├── crm/                     # módulo CRM: catálogos, leads, actividades, intereses y resumen
-│   ├── compras/                 # módulo compras: com_compras y com_compras_detalle
-│   ├── empresas/                # módulo empresas: model, dto, repository, service, handler
+│   ├── crm/                     # módulo CRM: catálogos, leads, oportunidades, campañas, actividades y resumen
+│   ├── compras/                 # módulo compras: com_compras y com_compras_detalle (entrada atómica a inventario)
+│   ├── empresas/                # módulo empresas: CRUD + creación automática de Consumidor Final (222222222222)
+│   ├── inventario/              # módulo inventarios: inv_ubicaciones, inv_stock, ajustes, traslados y hooks compras/ventas
 │   ├── precios/                 # módulo listas de precios: listas_precios y lista_precios_detalle
-│   ├── productos/               # módulo artículos: productos, servicios y catálogos
-│   ├── terceros/                # módulo terceros: roles_tercero (semilla: CLIENTE, PROVEEDOR, EMPLEADO)
-│   └── usuarios/                # módulo usuarios: model, dto, repository, service, handler
+│   ├── productos/               # módulo artículos: productos, servicios y catálogos (marcas, impuestos, categorías)
+│   ├── terceros/                # módulo terceros: tercero_maestro, roles_tercero globales y tercero_empresa_roles
+│   ├── usuarios/                # módulo usuarios: CRUD, key UUID v4 y regeneración
+│   └── ventas/                  # módulo ventas: ven_ventas, ven_ventas_detalle, IVA automático y salida atómica de stock
 ├── migrations/                  # SQL versionado (golang-migrate), embebido en el binario
 └── docker-compose.yml           # PostgreSQL local
 ```
@@ -170,6 +174,42 @@ Todos los endpoints requieren autenticación JWT (`Authorization: Bearer <token>
 - `tipo_identificacion` acepta `NIT`, `CC`, `CE`, `PASAPORTE`, `RUT`, `DNI`, `OTRO`.
 - `naturaleza_juridica` acepta `NATURAL` o `JURIDICA`.
 - La combinación `(empresa_id, tipo_identificacion, numero_identificacion)` es única entre terceros no eliminados → `409 identificacion_duplicada`.
+- Al crear una empresa se genera automáticamente el tercero **Consumidor Final** (`CC 222222222222`, `NATURAL`, rol único `CLIENTE`).
+
+## API de Consecutivos (`/api/v1/consecutivos`)
+
+Requiere JWT. Permite configurar prefijos, siguiente número, longitud de relleno y frecuencia de reinicio (`NUNCA`, `ANUAL`, `MENSUAL`) para `COMPRA`, `VENTA` e `INVENTARIO`.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/consecutivos/tipos-documento` | Listar tipos de documento |
+| GET / POST | `/api/v1/consecutivos/secuencias` | Listar o crear secuencia para la empresa |
+| PATCH | `/api/v1/consecutivos/secuencias/:id` | Actualizar prefijo / parámetros de la secuencia |
+
+## API de Compras (`/api/v1/compras`)
+
+Requiere JWT. CRUD completo con **soft delete** (`DELETE /api/v1/compras/:id`) y consecutivo automático (`COMPRA`).
+- Al crear/activar (`REGISTRADA` o `PAGADA`) se registra automáticamente `ENTRADA_COMPRA` en `inv_documentos` / `inv_stock` dentro de la misma transacción (solo artículos de tipo `PRODUCTO` con `control_inventario = TRUE`). Si falla el movimiento de inventario se revierte toda la compra.
+
+## API de Inventarios (`/api/v1/inventario`)
+
+Requiere JWT. Tablas con prefijo `inv_` y stock materializado en `inv_stock`.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/inventario/sucursales` | Sucursales activas de la empresa |
+| GET | `/api/v1/inventario/tipos-movimiento` | Catálogo global de tipos (`ENTRADA`, `SALIDA`, `TRASLADO`) |
+| POST / GET / PATCH `:id` / DELETE `:id` | `/api/v1/inventario/ubicaciones` | CRUD de ubicaciones/bodegas por sucursal (soft delete) |
+| GET | `/api/v1/inventario/stock` | Existencias consolidadas (`inv_stock`) con costo promedio y valor total |
+| POST / GET / GET `:id` | `/api/v1/inventario/movimientos` | Ajustes, pérdidas, averías, devoluciones y traslados internos entre ubicaciones |
+
+## API de Ventas (`/api/v1/ventas`)
+
+Requiere JWT. CRUD completo (`POST`, `GET`, `GET /:id`, `PATCH /:id`, `DELETE /:id` con **soft delete**).
+- **Cliente por defecto:** Si no se envía `cliente_id`, se asigna automáticamente **Consumidor Final** (`222222222222`).
+- **Consecutivo automático:** Generado con la secuencia `VENTA` de la empresa.
+- **Impuesto automático:** Cada línea calcula `impuesto = subtotal * (grupos_impuesto.tarifa / 100)` a partir del grupo de impuestos del artículo seleccionado.
+- **Salida atómica de inventario:** Al guardar en estado `REGISTRADA` o `PAGADA`, descuenta `inv_stock` (`SALIDA_VENTA`) dentro de la misma transacción. Los **servicios** (y productos sin `control_inventario`) no validan ni descuentan existencias; si algún producto inventariable no tiene stock suficiente, la transacción completa hace **rollback**.
 
 
 

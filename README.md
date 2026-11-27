@@ -60,7 +60,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 ├── README.md                              # Documentación general y arquitectura (este archivo)
 ├── documentacion base de datos.md         # Patrones de diseño de BD y catálogo completo de tablas
 ├── diseno_base_datos.drawio               # Diagrama ER base
-├── tesserak_modelo_corregido.drawio       # Diagrama ER actualizado (incluye campañas y etapas de oportunidad)
+├── tesserak_modelo_corregido.drawio       # Diagrama ER actualizado (incluye CRM, Productos, Precios, Terceros, Compras, Inventarios y Ventas)
 ├── docker-compose.yml                     # Orquestación completa: PostgreSQL + Backend + Frontend
 │
 ├── backend/
@@ -69,7 +69,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   ├── docker-compose.yml                 # PostgreSQL 17 aislado para desarrollo local
 │   ├── .env.example                       # Plantilla de variables de entorno
 │   ├── go.mod / go.sum
-│   ├── migrations/                        # Migraciones SQL versionadas (up/down)
+│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000019, up/down)
 │   │   ├── embed.go                       # //go:embed *.sql
 │   │   ├── 000001_init_usuarios.*         # paises, ciudades, empresas, sucursales, usuarios
 │   │   ├── 000002_init_crm.*              # monedas, orígenes, estados, motivos, leads, actividades, intereses
@@ -79,20 +79,32 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   │   ├── 000006_init_crm_etapas_oportunidad.*    # crm_etapa_oportunidad (renombrada en 000007)
 │   │   ├── 000007_init_crm_oportunidades.*         # crm_estado_oportunidades y crm_oportunidades
 │   │   ├── 000008_init_productos.*                 # unidades_medida, categorias_producto, marcas, grupos_impuesto, productos
-│   │   └── 000009_refactor_articulos_productos_servicios.* # articulos -> productos / servicios + catálogos
+│   │   ├── 000009_refactor_articulos_productos_servicios.* # articulos -> productos / servicios + catálogos
+│   │   ├── 000010_add_key_uuid_usuarios.*          # Columna key UUID v4 en usuarios
+│   │   ├── 000011_init_listas_precios.*            # listas_precios y lista_precios_detalle
+│   │   ├── 000012_init_compras.*                   # com_compras y com_compras_detalle
+│   │   ├── 000013_init_roles_tercero.*             # roles_tercero (semilla global: CLIENTE, PROVEEDOR, EMPLEADO)
+│   │   ├── 000014_init_tercero_maestro.*           # tercero_maestro (aislado por empresa_id)
+│   │   ├── 000015_init_tercero_empresa_roles.*     # tercero_empresa_roles (N:M terceros ↔ roles)
+│   │   ├── 000016_init_secuencias_documento.*      # tipos_documento y secuencias_documento (consecutivos automáticos)
+│   │   ├── 000017_init_inventario.*                # inv_ubicaciones, inv_tipos_movimiento, inv_documentos, inv_movimientos_detalle, inv_stock
+│   │   ├── 000018_backfill_compras_a_inventario.*  # Migración de compras históricas hacia inv_documentos / inv_stock
+│   │   └── 000019_init_ventas.*                    # ven_ventas, ven_ventas_detalle y backfill Consumidor Final (222222222222)
 │   └── internal/
 │       ├── auth/                          # Login, bcrypt, JWT HS256 y middleware RequireAuth
 │       ├── config/                        # Carga de .env y variables de entorno
+│       ├── consecutivos/                  # Secuencias configurables (COMPRA, VENTA, INVENTARIO) con bloqueo transaccional
 │       ├── database/                      # Conexión GORM y runner de golang-migrate
 │       ├── httpx/                         # AppError uniforme y formateo de errores de validación
-│       ├── empresas/                      # CRUD de empresas (soft delete)
-│       ├── usuarios/                      # CRUD de usuarios (1 sucursal, bcrypt, soft delete)
+│       ├── empresas/                      # CRUD de empresas (soft delete) + creación automática de Consumidor Final
+│       ├── usuarios/                      # CRUD de usuarios (1 sucursal, bcrypt, regeneración de key UUID, soft delete)
 │       ├── productos/                     # Artículos (productos físicos y servicios), categorías, marcas, impuestos y catálogos
+│       ├── precios/                       # Listas de precios y detalle por artículo
+│       ├── terceros/                      # Terceros por empresa, asignación de roles globales y Consumidor Final
+│       ├── compras/                       # CRUD de compras con consecutivo automático y entrada atómica a inventario
+│       ├── inventario/                    # Ubicaciones, stock materializado (inv_stock), ajustes, traslados y hooks de compras/ventas
+│       ├── ventas/                        # CRUD de ventas con consecutivo automático, IVA automático y salida atómica de inventario
 │       └── crm/                           # Módulo CRM completo (leads, oportunidades, campañas, configuración)
-│           ├── models.go / dto.go / repository.go / service.go / handler.go
-│           ├── campana_models.go / campana_dto.go / campana_repository.go / campana_service.go / campana_handler.go
-│           ├── etapa_oportunidad.go       # Catálogo de etapas de oportunidades
-│           └── handler_test.go / campana_handler_test.go / campana_integration_test.go
 │
 └── frontend/
     ├── Dockerfile / nginx.conf            # Build Angular + servidor estático Nginx
@@ -109,14 +121,16 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
                 ├── auth/login/            # Pantalla de inicio de sesión
                 ├── dashboard/             # Panel principal con KPIs en vivo del CRM y accesos rápidos
                 ├── coming-soon/           # Pantalla placeholder para módulos pendientes
-                └── crm/
-                    ├── crm.models.ts      # Interfaces TypeScript del dominio CRM
-                    ├── crm.service.ts     # Cliente HTTP hacia /api/v1/crm/*
-                    ├── resumen-comercial/ # /crm/resumen
-                    ├── leads/             # /crm/leads (CRUD, filtros, etapas, conversión, atribución de campaña)
-                    ├── campanas/          # /crm/campanas (campañas, tipos, detalle con indicadores, leads y gastos)
-                    ├── configuracion/     # /crm/configuracion (Orígenes, Etapas, Etapas de oportunidades, Motivos)
-                    └── crm-seccion-vacia/ # Placeholder reutilizable para secciones CRM en construcción
+                ├── administracion/
+                │   └── gestion-empresa/   # /gestion-empresa (prefijos de consecutivos, ubicaciones por sucursal, key de usuario)
+                ├── crm/                   # /crm/{leads, oportunidades, campanas, configuracion, resumen}
+                ├── productos/             # /productos/{catalogo, categorias, configuracion}
+                ├── precios/
+                │   └── listas-precios/    # /productos/listas-precios
+                ├── terceros/              # /terceros (terceros con chips de roles globales de solo lectura)
+                ├── compras/               # /compras (proveedores filtrados, consecutivo automático, soft delete)
+                ├── inventario/            # /inventario (vista por ubicación -> stock, ajustes, pérdidas, averías, devoluciones y traslados)
+                └── ventas/                # /ventas (Consumidor Final por defecto, cálculo automático de IVA, salida de stock, soft delete)
 ```
 
 ---
@@ -179,6 +193,15 @@ Las migraciones están en `backend/migrations/`, se embeben en el binario median
 | `000008` | Catálogos de productos por empresa | `unidades_medida`, `categorias_producto`, `marcas`, `grupos_impuesto`, `productos` |
 | `000009` | Supertipo–Subtipo de artículos | `tipos_articulo`, `metodos_valoracion`, `modalidades_servicio`, `articulos` → `productos` (1:1) / `servicios` (1:1, duración en horas), `grupo_impuesto_id` obligatorio y `marca_id` opcional |
 | `000010` | Clave pública UUID v4 en usuarios | Agrega columna `key UUID NOT NULL DEFAULT gen_random_uuid()` con índice único `ux_usuarios_key` en `usuarios` |
+| `000011` | Listas de precios | `listas_precios` y `lista_precios_detalle` |
+| `000012` | Módulo de compras | `com_compras` y `com_compras_detalle` (con soft delete) |
+| `000013` | Roles globales de tercero | `roles_tercero` con semilla de sistema (`CLIENTE`, `PROVEEDOR`, `EMPLEADO`) |
+| `000014` | Maestro de terceros por empresa | `tercero_maestro` con FK directa a `empresas` y unicidad por identificación |
+| `000015` | Relación terceros ↔ roles | `tercero_empresa_roles` (N:M) |
+| `000016` | Consecutivos configurables | `tipos_documento` (`COMPRA`, `VENTA`, `INVENTARIO`) y `secuencias_documento` |
+| `000017` | Módulo de inventarios (`inv_`) | `inv_ubicaciones`, `inv_tipos_movimiento` (9 tipos semilla), `inv_documentos`, `inv_movimientos_detalle`, `inv_stock` (stock materializado + costo promedio) |
+| `000018` | Backfill de compras a inventario | Genera movimientos `ENTRADA_COMPRA` e inicializa `inv_stock` para compras históricas existentes |
+| `000019` | Módulo de ventas y Consumidor Final | `ven_ventas`, `ven_ventas_detalle` (soft delete) y backfill de `Consumidor Final` (`CC 222222222222`, rol `CLIENTE`) por empresa |
 
 El diagrama relacional completo y actualizado está en [tesserak_modelo_corregido.drawio](tesserak_modelo_corregido.drawio) (editable en [diagrams.net](https://app.diagrams.net/)) y la documentación detallada de convenciones de BD en [documentacion base de datos.md](documentacion%20base%20de%20datos.md).
 
@@ -194,6 +217,8 @@ Base URL local: `http://localhost:8080`
 
 ### Empresas (`/api/v1/empresas`) y Usuarios (`/api/v1/usuarios`)
 - `POST`, `GET` (filtros + paginación), `GET /:id`, `PATCH /:id`, `DELETE /:id` (soft delete).
+- Al crear una empresa (`POST /api/v1/empresas`) se crea automáticamente el tercero por defecto **Consumidor Final** (`222222222222`, rol único `CLIENTE`).
+- `POST /api/v1/usuarios/:id/regenerar-key` — Regenera la `key` (UUID v4) del usuario.
 
 ### CRM — Núcleo y Catálogos (`/api/v1/crm`)
 - `GET /api/v1/crm/resumen?empresa_id=` — KPIs del embudo, conversión, valor estimado, etapas, temperatura y actividades pendientes/vencidas.
@@ -238,6 +263,33 @@ Base URL local: `http://localhost:8080`
   - `GET /api/v1/productos` — Listado paginado (`tipo_articulo_id`, `categoria_id`, `estado`, `q`, `page`, `page_size`).
   - `GET / PATCH / DELETE /api/v1/productos/:id` — Consulta, actualización transaccional y **soft delete**.
 
+### Listas de Precios (`/api/v1/precios`, requieren JWT)
+- `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/precios/listas` (soft delete).
+- `GET / PUT / DELETE` en `/api/v1/precios/listas/:id/detalles` (`/:articuloId`) — Gestión de precios por artículo dentro de cada lista.
+
+### Terceros (`/api/v1/terceros`, requieren JWT)
+- `GET /api/v1/terceros/roles` — Catálogo global de roles (`CLIENTE`, `PROVEEDOR`, `EMPLEADO`; de solo lectura en frontend).
+- `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/terceros` — CRUD aislado por `empresa_id` con asignación múltiple de roles (`rol_ids`) y soft delete.
+
+### Consecutivos (`/api/v1/consecutivos`, requieren JWT)
+- `GET /api/v1/consecutivos/tipos-documento` — Tipos de documento configurables (`COMPRA`, `VENTA`, `INVENTARIO`).
+- `POST / GET / PATCH :id` en `/api/v1/consecutivos/secuencias` — Configuración de prefijo, siguiente número, relleno y frecuencia de reinicio (`NUNCA`, `ANUAL`, `MENSUAL`).
+
+### Compras (`/api/v1/compras`, requieren JWT)
+- `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/compras` (soft delete).
+- Genera consecutivo automático (`COMPRA`) y ejecuta `ENTRADA_COMPRA` en `inv_stock` dentro de la misma transacción (solo para productos con `control_inventario = TRUE`); si falla el movimiento de inventario se realiza rollback completo.
+
+### Inventarios (`/api/v1/inventario`, requieren JWT)
+- `GET /api/v1/inventario/sucursales` — Sucursales activas de la empresa (para asignar al crear/editar ubicaciones).
+- `GET /api/v1/inventario/tipos-movimiento` — Catálogo global (`AJUSTE_POSITIVO`, `AJUSTE_NEGATIVO`, `PERDIDA`, `AVERIA`, `DEVOLUCION_PROVEEDOR`, `DEVOLUCION_CLIENTE`, `ENTRADA_COMPRA`, `SALIDA_VENTA`, `TRASLADO`).
+- `POST / GET / PATCH :id / DELETE :id` en `/api/v1/inventario/ubicaciones` (soft delete).
+- `GET /api/v1/inventario/stock` — Consulta de stock materializado en `inv_stock` por ubicación/artículo.
+- `POST / GET / GET :id` en `/api/v1/inventario/movimientos` — Ajustes, pérdidas, averías, devoluciones y traslados internos entre ubicaciones con actualización atómica de `inv_stock`.
+
+### Ventas (`/api/v1/ventas`, requieren JWT)
+- `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/ventas` (soft delete).
+- Consecutivo automático (`VENTA`), cliente por defecto **Consumidor Final** (`222222222222`) si no se indica `cliente_id`, cálculo automático de impuesto desde `grupos_impuesto.tarifa` de cada artículo y salida atómica `SALIDA_VENTA` de `inv_stock` (los servicios y productos sin control de inventario no validan ni descuentan stock; si falta stock de un producto inventariable, toda la transacción hace rollback).
+
 ---
 
 ## 7. Módulos y navegación del Frontend
@@ -256,6 +308,13 @@ Base URL local: `http://localhost:8080`
 | `/crm/actividades` | Base lista (`Pronto`) | Sección pendiente |
 | `/productos/catalogo` | Implementado | Catálogo de productos físicos y servicios (`articulos` → `productos` / `servicios`) |
 | `/productos/categorias` | Implementado | Administración CRUD (soft delete) de categorías de productos |
+| `/productos/listas-precios` | Implementado | Listas de precios y asignación de precios por artículo |
+| `/productos/configuracion` | Implementado | Configuración de marcas y grupos de impuesto (`grupos_impuesto`) |
+| `/terceros` | Implementado | Maestro de terceros con asignación de roles globales de solo lectura (`CLIENTE`, `PROVEEDOR`, `EMPLEADO`) |
+| `/compras` | Implementado | Registro de compras con proveedores filtrados, consecutivo automático, entrada a inventario y soft delete |
+| `/inventario` | Implementado | Vista por ubicaciones → detalle de stock (`inv_stock`), ajustes, pérdidas, averías, devoluciones y traslados internos |
+| `/ventas` | Implementado | Registro de ventas con Consumidor Final por defecto, cálculo automático de IVA, salida atómica de stock y soft delete |
+| `/gestion-empresa` | Implementado | Administración de prefijos de consecutivos, ubicaciones/bodegas por sucursal (CRUD + soft delete) y key UUID de usuario |
 
 ---
 
@@ -350,5 +409,5 @@ npm run build
 
 ## 11. Estado actual y hoja de ruta
 
-- **Implementado:** Infraestructura base, Auth JWT, Empresas, Usuarios, CRM Leads (con `usuario_facebook` y atribución a campaña), Campañas de marketing (tipos, campañas, leads atribuidos, UTM, gastos e indicadores) y Configuración CRM (Orígenes, Etapas, Etapas de oportunidades, Motivos de descarte).
-- **Próximos módulos:** Oportunidades y Pipeline comercial (Kanban), Agenda de Actividades en UI, Resumen comercial, Terceros (Clientes/Proveedores/Empleados y FK de conversión), Productos/Inventario, Ventas, Compras y Lealtad.
+- **Implementado:** Infraestructura base, Auth JWT, Empresas (con creación automática de `Consumidor Final`), Usuarios (con `key` UUID), Gestión de empresa (prefijos de consecutivos, ubicaciones por sucursal, key de usuario), CRM (Leads, Oportunidades, Campañas y Configuración), Productos y Servicios (Catálogo, Categorías, Listas de precios, Marcas e Impuestos), Terceros, Compras, Inventarios (`inv_stock`, ajustes y traslados) y Ventas (con cálculo automático de IVA y descuento atómico de stock).
+- **Próximos módulos:** Pipeline comercial (Kanban), Agenda de Actividades en UI, Resumen comercial, gestión UI de Usuarios y módulo de Lealtad.
