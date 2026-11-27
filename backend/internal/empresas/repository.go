@@ -19,6 +19,8 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
+func (r *Repository) DB() *gorm.DB { return r.db }
+
 // WithTx ejecuta fn dentro de una transacción.
 func (r *Repository) WithTx(ctx context.Context, fn func(tx *Repository) error) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

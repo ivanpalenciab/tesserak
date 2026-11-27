@@ -251,3 +251,13 @@ Permite emitir consecutivos automáticos y sin duplicados por empresa y tipo de 
 3. **Índices y constraints nombrados explícitamente:** `uq_*` (unique), `ux_*` (unique index parcial), `ix_*` (index), `fk_*` (foreign key), `ck_*` (check). Esto permite al backend inspeccionar `pgErr.ConstraintName` y devolver errores HTTP precisos (`409`, `422`).
 4. **Fechas:** siempre `TIMESTAMPTZ` almacenadas en UTC.
 5. **Seguridad:** las contraseñas usan `VARCHAR(255)` (preparado para `bcrypt` o `Argon2id`) y nunca se exponen en DTOs de salida.
+
+
+---
+
+### Módulo de Ventas (`000019_init_ventas`)
+
+- **Cliente por defecto por empresa (`Consumidor Final`):** Al crear una empresa (y vía backfill en `000019` para empresas existentes) se crea automáticamente un registro en `tercero_maestro` con `tipo_identificacion = 'CC'`, `numero_identificacion = '222222222222'`, `razon_social = 'Consumidor Final'`, `naturaleza_juridica = 'NATURAL'`, asignado únicamente al rol global `CLIENTE` en `tercero_empresa_roles`.
+- **`ven_ventas`**: Cabecera de ventas por `empresa_id`, `sucursal_id`, `ubicacion_id` (FK compuesta a `inv_ubicaciones`), `cliente_id` (FK compuesta a `tercero_maestro`), `consecutivo` automático (`VENTA`), `estado` (`BORRADOR`, `REGISTRADA`, `PAGADA`, `ANULADA`), totales (`subtotal`, `total_iva`, `total`), `usuario_id` y `deleted_at` (soft delete).
+- **`ven_ventas_detalle`**: Líneas de artículos vendidos (`venta_id`, `articulo_id`, `cantidad`, `precio_unitario`, `subtotal`, `impuesto`, `total`).
+- **Atomicidad con Inventario:** Al registrar una venta (`REGISTRADA`/`PAGADA`) se ejecuta `SALIDA_VENTA` sobre `inv_documentos`, `inv_movimientos_detalle` e `inv_stock` dentro de la misma transacción; si falla el movimiento de inventario (ej. stock insuficiente), se realiza rollback completo de la venta. El mismo comportamiento transaccional atómico aplica para `ENTRADA_COMPRA` en `com_compras`.

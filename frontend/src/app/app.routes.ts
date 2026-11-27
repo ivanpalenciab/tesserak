@@ -159,6 +159,12 @@ export const routes: Routes = [
         title: 'Compras — Tesserak',
       },
       {
+        path: 'ventas',
+        loadComponent: () =>
+          import('./features/ventas/ventas/ventas').then((m) => m.VentasComponent),
+        title: 'Ventas — Tesserak',
+      },
+      {
         path: 'inventario',
         loadComponent: () =>
           import('./features/inventario/inventario/inventario').then((m) => m.InventarioComponent),

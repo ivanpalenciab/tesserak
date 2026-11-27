@@ -1,0 +1,395 @@
+<section class="ventas-page">
+  <header class="page-header">
+    <div>
+      <h1>Ventas</h1>
+      <p class="subtitle">
+        Registra ventas con consecutivo automático, cliente por defecto
+        <strong>Consumidor Final (222222222222)</strong> y salida atómica de inventario.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarVentas()">Actualizar</button>
+      <button type="button" class="btn-primary" (click)="abrirNuevaVenta()">+ Nueva venta</button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  <section class="filters-panel">
+    <div class="filter-search">
+      <input
+        type="search"
+        [value]="filtroTexto()"
+        (input)="onBuscar($any($event.target).value)"
+        placeholder="Buscar por consecutivo, cliente, documento u observaciones..."
+        aria-label="Buscar ventas"
+      />
+    </div>
+
+    <select
+      [value]="filtroEstado()"
+      (change)="onFiltrarEstado($any($event.target).value)"
+      aria-label="Filtrar por estado"
+    >
+      <option value="">Todos los estados</option>
+      @for (e of estados; track e.value) {
+        <option [value]="e.value">{{ e.label }}</option>
+      }
+    </select>
+
+    <input
+      type="date"
+      [value]="filtroFechaDesde()"
+      (change)="onFiltrarFechaDesde($any($event.target).value)"
+      aria-label="Fecha desde"
+    />
+    <input
+      type="date"
+      [value]="filtroFechaHasta()"
+      (change)="onFiltrarFechaHasta($any($event.target).value)"
+      aria-label="Fecha hasta"
+    />
+  </section>
+
+  <section class="table-panel">
+    <div class="table-meta">
+      <span>
+        Mostrando <strong>{{ ventas().length }}</strong> de <strong>{{ total() }}</strong> ventas
+      </span>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando ventas...</div>
+    } @else if (ventas().length === 0) {
+      <div class="empty-box">
+        <p>No hay ventas registradas con los filtros actuales.</p>
+        <button type="button" class="btn-primary" (click)="abrirNuevaVenta()">
+          Registrar primera venta
+        </button>
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Consecutivo</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Ubicación</th>
+              <th>Estado</th>
+              <th>Total</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (v of ventas(); track v.id) {
+              <tr
+                class="selectable-row"
+                [class.selected]="ventaDetalle()?.id === v.id"
+                (click)="verDetalle(v)"
+              >
+                <td class="nowrap"><span class="code-pill">{{ v.consecutivo }}</span></td>
+                <td class="nowrap">{{ formatearFecha(v.fecha_venta) }}</td>
+                <td>
+                  <div class="cell-title">{{ v.cliente_nombre || 'Cliente #' + v.cliente_id }}</div>
+                  @if (v.cliente_identificacion) {
+                    <div class="cell-sub">{{ v.cliente_identificacion }}</div>
+                  }
+                </td>
+                <td class="nowrap">{{ v.ubicacion_nombre || '#' + v.ubicacion_id }}</td>
+                <td class="nowrap">
+                  <span class="status-badge" [attr.data-estado]="v.estado">{{ v.estado }}</span>
+                </td>
+                <td class="nowrap price-cell">{{ formatearMonto(v.total) }}</td>
+                <td class="actions-col" (click)="$event.stopPropagation()">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="verDetalle(v)">Ver</button>
+                    <button type="button" class="btn-icon" (click)="abrirEditarVenta(v)">
+                      Editar
+                    </button>
+                    <button type="button" class="btn-icon danger" (click)="solicitarEliminar(v)">
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPaginas() > 1) {
+        <div class="pagination">
+          <span class="page-info">Página {{ page() }} de {{ totalPaginas() }}</span>
+          <div class="row-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="irPagina(page() - 1)"
+              [disabled]="page() <= 1"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="irPagina(page() + 1)"
+              [disabled]="page() >= totalPaginas()"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </section>
+
+  @if (ventaDetalle(); as det) {
+    <section class="detail-section">
+      <div class="detail-header">
+        <div>
+          <h2>Detalle de venta {{ det.consecutivo }}</h2>
+          <p class="subtitle">
+            Cliente: <strong>{{ det.cliente_nombre }}</strong>
+            @if (det.cliente_identificacion) { ({{ det.cliente_identificacion }}) }
+            · Ubicación: <strong>{{ det.ubicacion_nombre || '#' + det.ubicacion_id }}</strong>
+            @if (det.observaciones) { · {{ det.observaciones }} }
+          </p>
+        </div>
+        <button type="button" class="btn-secondary" (click)="cerrarDetalle()">Ocultar</button>
+      </div>
+
+      <div class="table-panel">
+        @if (loadingDetalle()) {
+          <div class="empty-box">Cargando detalle...</div>
+        } @else {
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Artículo</th>
+                  <th>Cantidad</th>
+                  <th>Precio unitario</th>
+                  <th>Subtotal</th>
+                  <th>Impuesto</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of det.detalles ?? []; track l.id) {
+                  <tr>
+                    <td>
+                      <span class="code-pill">{{ l.articulo_codigo || '#' + l.articulo_id }}</span>
+                      {{ l.articulo_nombre }}
+                    </td>
+                    <td class="nowrap">{{ l.cantidad }}</td>
+                    <td class="nowrap">{{ formatearMonto(l.precio_unitario) }}</td>
+                    <td class="nowrap">{{ formatearMonto(l.subtotal) }}</td>
+                    <td class="nowrap">{{ formatearMonto(l.impuesto) }}</td>
+                    <td class="nowrap price-cell">{{ formatearMonto(l.total) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </section>
+  }
+</section>
+
+<!-- Modal Crear / Editar Venta -->
+@if (modalAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModal()">
+    <div
+      class="modal-card modal-wide"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>{{ editando() ? 'Editar venta ' + editando()?.consecutivo : 'Nueva venta' }}</h2>
+        <button type="button" class="btn-close" (click)="cerrarModal()" aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="form" (ngSubmit)="guardarVenta()">
+        @if (modalError(); as err) {
+          <div class="alert error" role="alert">{{ err }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Cliente *</span>
+            <select formControlName="cliente_id">
+              <option [ngValue]="null">Seleccionar cliente...</option>
+              @for (c of clientes(); track c.id) {
+                <option [ngValue]="c.id">
+                  {{ c.razon_social }} ({{ c.numero_identificacion }})
+                </option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Ubicación de salida (inventario) *</span>
+            <select formControlName="ubicacion_id">
+              <option [ngValue]="null">Seleccionar ubicación...</option>
+              @for (u of ubicaciones(); track u.id) {
+                <option [ngValue]="u.id">{{ u.codigo }} — {{ u.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Fecha de venta *</span>
+            <input type="date" formControlName="fecha_venta" />
+          </label>
+
+          <label class="field">
+            <span>Fecha de vencimiento</span>
+            <input type="date" formControlName="fecha_vencimiento" />
+          </label>
+
+          <label class="field">
+            <span>Estado *</span>
+            <select formControlName="estado">
+              @for (e of estados; track e.value) {
+                <option [value]="e.value">{{ e.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Observaciones</span>
+            <input
+              type="text"
+              formControlName="observaciones"
+              placeholder="Notas opcionales de la venta..."
+            />
+          </label>
+        </div>
+
+        <div class="lines-section">
+          <div class="lines-header">
+            <h3>Artículos vendidos *</h3>
+            <button type="button" class="btn-secondary" (click)="agregarLinea()">
+              + Agregar línea
+            </button>
+          </div>
+
+          <div class="lines-list" formArrayName="detalles">
+            @for (linea of detallesArray.controls; track $index; let i = $index) {
+              <div class="line-card" [formGroupName]="i">
+                <div class="line-grid">
+                  <label class="field span-2">
+                    <span>Artículo *</span>
+                    <select formControlName="articulo_id">
+                      <option [ngValue]="null">Seleccionar artículo...</option>
+                      @for (art of articulos(); track art.id) {
+                        <option [ngValue]="art.id">{{ art.codigo }} — {{ art.nombre }}</option>
+                      }
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Cantidad *</span>
+                    <input type="number" step="0.01" min="0.0001" formControlName="cantidad" />
+                  </label>
+
+                  <label class="field">
+                    <span>Precio unitario *</span>
+                    <input type="number" step="0.01" min="0" formControlName="precio_unitario" />
+                  </label>
+
+                  <label class="field">
+                    <span>Impuesto ({{ tarifaLinea(linea) }}%)</span>
+                    <input
+                      type="text"
+                      [value]="formatearMonto(impuestoLinea(linea))"
+                      readonly
+                      aria-label="Impuesto calculado automáticamente"
+                    />
+                  </label>
+
+                  @if (detallesArray.length > 1) {
+                    <div class="line-remove">
+                      <button type="button" class="btn-icon danger" (click)="eliminarLinea(i)">
+                        Quitar
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="totals-bar">
+            <span>Subtotal: <strong>{{ formatearMonto(calcularSubtotal()) }}</strong></span>
+            <span>IVA / Imp.: <strong>{{ formatearMonto(calcularIVA()) }}</strong></span>
+            <span class="total-final">
+              Total: <strong>{{ formatearMonto(calcularTotal()) }}</strong>
+            </span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModal()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            {{ saving() ? 'Guardando...' : editando() ? 'Guardar cambios' : 'Registrar venta' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminar (Soft Delete) -->
+@if (ventaAEliminar(); as target) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Eliminar venta</h2>
+        <button type="button" class="btn-close" (click)="cancelarEliminar()" aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar la venta <strong>{{ target.consecutivo }}</strong>? Se aplicará
+        eliminación lógica (soft delete).
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarEliminar()"
+          [disabled]="saving()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarEliminar()"
+          [disabled]="saving()"
+        >
+          {{ saving() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

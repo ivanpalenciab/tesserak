@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"tesserak/backend/internal/httpx"
+	"tesserak/backend/internal/terceros"
 )
 
 const (
@@ -44,7 +45,16 @@ func (s *Service) Crear(ctx context.Context, req CrearEmpresaRequest) (*EmpresaR
 		Logo:                trimPtr(req.Logo),
 		Activo:              activo,
 	}
-	if err := s.repo.Create(ctx, e); err != nil {
+	err := s.repo.WithTx(ctx, func(tx *Repository) error {
+		if err := tx.Create(ctx, e); err != nil {
+			return err
+		}
+		if _, err := terceros.AsegurarConsumidorFinalTx(ctx, tx.DB(), e.ID); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, mapError(err)
 	}
 	resp := toResponse(e)

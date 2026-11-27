@@ -36,6 +36,24 @@ func RegistrarEntradaCompraTx(ctx context.Context, txDB *gorm.DB, p EntradaCompr
 		return nil
 	}
 
+	artIDs := make([]int32, 0, len(p.Detalles))
+	for _, d := range p.Detalles {
+		artIDs = append(artIDs, d.ArticuloID)
+	}
+	invSet, err := filtrarArticulosInventariablesTx(ctx, txDB, p.EmpresaID, artIDs)
+	if err != nil {
+		return err
+	}
+	lineasInv := make([]EntradaCompraLinea, 0, len(p.Detalles))
+	for _, d := range p.Detalles {
+		if invSet[d.ArticuloID] {
+			lineasInv = append(lineasInv, d)
+		}
+	}
+	if len(lineasInv) == 0 {
+		return nil
+	}
+
 	var existente int64
 	if err := txDB.WithContext(ctx).
 		Model(&DocumentoInventario{}).
@@ -85,8 +103,8 @@ func RegistrarEntradaCompraTx(ctx context.Context, txDB *gorm.DB, p EntradaCompr
 		return err
 	}
 
-	detallesInv := make([]MovimientoInventarioDetalle, 0, len(p.Detalles))
-	for _, line := range p.Detalles {
+	detallesInv := make([]MovimientoInventarioDetalle, 0, len(lineasInv))
+	for _, line := range lineasInv {
 		if err := aplicarEntrada(ctx, txRepo, p.EmpresaID, line.ArticuloID, ubicacionID, line.Cantidad, line.CostoUnitario); err != nil {
 			return err
 		}
@@ -101,6 +119,32 @@ func RegistrarEntradaCompraTx(ctx context.Context, txDB *gorm.DB, p EntradaCompr
 	}
 
 	return txRepo.CreateDetalles(ctx, detallesInv)
+}
+
+// filtrarArticulosInventariablesTx retorna el conjunto de articulo_id que corresponden
+// a productos con control de inventario activo (excluye servicios y productos sin control).
+func filtrarArticulosInventariablesTx(ctx context.Context, txDB *gorm.DB, empresaID int32, articuloIDs []int32) (map[int32]bool, error) {
+	uniq := deduplicateInt32(articuloIDs)
+	out := make(map[int32]bool, len(uniq))
+	if len(uniq) == 0 {
+		return out, nil
+	}
+	var ids []int32
+	err := txDB.WithContext(ctx).
+		Table("articulos a").
+		Select("a.id").
+		Joins("JOIN tipos_articulo ta ON ta.id = a.tipo_articulo_id").
+		Joins("LEFT JOIN productos pr ON pr.articulo_id = a.id").
+		Where("a.empresa_id = ? AND a.deleted_at IS NULL AND a.id IN ?", empresaID, uniq).
+		Where("ta.codigo = 'PRODUCTO' AND COALESCE(pr.control_inventario, TRUE) = TRUE").
+		Pluck("a.id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }
 
 func resolverUbicacionDestinoTx(ctx context.Context, txDB *gorm.DB, empresaID, sucursalID int32) (int32, error) {

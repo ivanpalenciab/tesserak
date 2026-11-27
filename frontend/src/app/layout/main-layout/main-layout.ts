@@ -72,7 +72,7 @@ export class MainLayoutComponent {
             { label: 'Configuración', route: '/crm/configuracion' },
           ],
         },
-        { label: 'Ventas', icon: 'sales', disabled: true, badge: 'Pronto' },
+        { label: 'Ventas', route: '/ventas', icon: 'sales' },
         { label: 'Lealtad', icon: 'loyalty', disabled: true, badge: 'Pronto' },
       ],
     },
