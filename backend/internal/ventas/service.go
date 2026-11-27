@@ -13,6 +13,7 @@ import (
 	"tesserak/backend/internal/consecutivos"
 	"tesserak/backend/internal/httpx"
 	"tesserak/backend/internal/inventario"
+	"tesserak/backend/internal/lealtad"
 	"tesserak/backend/internal/terceros"
 )
 
@@ -166,6 +167,46 @@ func (s *Service) Crear(ctx context.Context, empresaID, sucursalDefaultID int32,
 				Fecha:         v.FechaVenta,
 				Observaciones: v.Observaciones,
 				Detalles:      lineasInv,
+			}); err != nil {
+				return err
+			}
+
+			// Redención de puntos de lealtad (si se solicitó) antes de acumular sobre el total neto
+			totalNeto := v.Total
+			if req.PuntosRedimir != nil && *req.PuntosRedimir > 0 {
+				descuento, err := lealtad.RedimirPorVentaTx(ctx, tx.DB(), lealtad.RedimirVentaParams{
+					EmpresaID:      empresaID,
+					SucursalID:     v.SucursalID,
+					ClienteID:      v.ClienteID,
+					UsuarioID:      usuarioID,
+					VentaID:        v.ID,
+					Consecutivo:    v.Consecutivo,
+					PuntosRedimir:  *req.PuntosRedimir,
+					TotalAntesDesc: v.Total,
+				})
+				if err != nil {
+					return err
+				}
+				totalNeto = round4(v.Total - descuento)
+				if err := tx.UpdateVenta(ctx, empresaID, v.ID, map[string]any{
+					"puntos_redimidos":  *req.PuntosRedimir,
+					"descuento_lealtad": descuento,
+					"total":             totalNeto,
+				}); err != nil {
+					return err
+				}
+			}
+
+			// Acumulación automática de puntos de lealtad (si el cliente es miembro y la empresa está adherida)
+			if err := lealtad.AcumularPorVentaTx(ctx, tx.DB(), lealtad.AcumularVentaParams{
+				EmpresaID:   empresaID,
+				SucursalID:  v.SucursalID,
+				ClienteID:   v.ClienteID,
+				UsuarioID:   usuarioID,
+				VentaID:     v.ID,
+				Consecutivo: v.Consecutivo,
+				TotalVenta:  totalNeto,
+				Fecha:       v.FechaVenta,
 			}); err != nil {
 				return err
 			}
@@ -371,6 +412,17 @@ func (s *Service) Actualizar(ctx context.Context, empresaID int32, id int64, req
 			}); err != nil {
 				return err
 			}
+		} else if actualizada.Estado == EstadoAnulada {
+			if err := lealtad.RevertirPorVentaTx(ctx, tx.DB(), lealtad.RevertirVentaParams{
+				EmpresaID:   empresaID,
+				SucursalID:  actualizada.SucursalID,
+				UsuarioID:   actualizada.UsuarioID,
+				VentaID:     actualizada.ID,
+				Consecutivo: actualizada.Consecutivo,
+				Motivo:      "anulación",
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -383,7 +435,24 @@ func (s *Service) Actualizar(ctx context.Context, empresaID int32, id int64, req
 }
 
 func (s *Service) Eliminar(ctx context.Context, empresaID int32, id int64) error {
-	return mapError(s.repo.SoftDelete(ctx, empresaID, id))
+	err := s.repo.WithTx(ctx, func(tx *Repository) error {
+		v, err := tx.FindByID(ctx, empresaID, id)
+		if err != nil {
+			return err
+		}
+		if err := lealtad.RevertirPorVentaTx(ctx, tx.DB(), lealtad.RevertirVentaParams{
+			EmpresaID:   empresaID,
+			SucursalID:  v.SucursalID,
+			UsuarioID:   v.UsuarioID,
+			VentaID:     v.ID,
+			Consecutivo: v.Consecutivo,
+			Motivo:      "eliminación",
+		}); err != nil {
+			return err
+		}
+		return tx.SoftDelete(ctx, empresaID, id)
+	})
+	return mapError(err)
 }
 
 func buildDetalles(inputs []VentaDetalleInput, tarifas map[int32]float64) (detalles []VentaDetalle, subtotal, totalIVA, total float64) {

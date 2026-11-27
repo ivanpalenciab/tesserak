@@ -198,15 +198,19 @@ Permite gestionar múltiples esquemas comerciales de precios por empresa (genera
 | `com_compras` | Implementada (`000012`) | Cabecera de compras a proveedores (`consecutivo` generado automáticamente desde `secuencias_documento` si no se envía, único por empresa; `numero_factura_proveedor`, `tercero_empresa_rol_id`, `proveedor_nombre`, `moneda_id`, `estado`, fechas de compra y vencimiento, `subtotal`, `total_iva`, `total`, `observaciones`, `usuario_id`, `sucursal_id` y `deleted_at`). | **Header–Detail + Multi-tenant con FK compuesta + Soft Delete**. |
 | `com_compras_detalle` | Implementada (`000012`) | Ítems comprados vinculados a `com_compras` y `articulos` (`articulo_id`, `descripcion`, `cantidad`, `costo_unitario`, `subtotal`, `impuesto`, `total`). | **Header–Detail**. |
 
-### 3.10 Programa de Lealtad
+### 3.10 Programa de Lealtad (Arquitectura Híbrida: Coalición, Global y Local)
+
+Soporta simultáneamente **programas individuales por empresa** (`LOCAL`), **alianzas donde participan varias empresas** (`COALICION`) y **programas globales de plataforma** (`GLOBAL`). La participación de empresas en programas se modela con una relación **N:M** (`lealtad_programa_empresas`) y la identidad del beneficiario se desacopla de `empresa_id` mediante `lealtad_miembros` para permitir acumulación y redención entre múltiples empresas sin romper el aislamiento de `tercero_maestro`.
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
-| `lealtad_programas` | Diseñada | Programas de fidelización definidos por empresa con vigencia y estado. | **Entidad de configuración por tenant**. |
-| `lealtad_reglas` | Diseñada | Reglas de acumulación de puntos (`puntos_por_monto`, `compra_minima`, moneda, vigencia). | **Rule Engine ligero / Estrategia parametrizada**. |
-| `lealtad_cuentas` | Diseñada | Cuenta de puntos de un cliente dentro de un programa, con `saldo_puntos` materializado. | **Materialized Balance**. |
-| `lealtad_transacciones` | Diseñada | Historial inmutable de acumulación, ajuste o vencimiento de puntos con `saldo_posterior` y vínculo a la venta origen. | **Append-only Ledger (Libro mayor de puntos)**. |
-| `lealtad_redenciones` | Diseñada | Registro de canje de puntos por descuentos aplicados en una venta. | **Documento transaccional vinculado a cuenta y venta**. |
+| `lealtad_programas` | Implementada (`000027`) | Define cada programa (`codigo`, `nombre`, `alcance`: `LOCAL`/`COALICION`/`GLOBAL`, `empresa_propietaria_id` opcional, `usuario_administrador_id`, `es_sistema`, `moneda_referencia_id`, `valor_punto_redencion`, `dias_vencimiento`, `estado`, vigencias y `deleted_at`). Incluye semilla por defecto **`Lealtad Tesserak`** (`LEALTAD_TESSERAK`, `GLOBAL`, `es_sistema = TRUE`) administrada por `ipalenciab`. | **Entidad de configuración multi-alcance + Soft Delete**. |
+| `lealtad_programa_empresas` | Implementada (`000027`) | Relación N:M entre programas y empresas (`programa_id`, `empresa_id`, `rol_empresa`: `PROPIETARIA`/`ALIADA`, `permite_acumular`, `permite_redimir`, `es_programa_principal`, vigencia y `activo`). | **Coalition Loyalty / Tabla puente N:M**. |
+| `lealtad_miembros` | Implementada (`000029`) | Identidad global del cliente en lealtad (`UNIQUE (pais_id, upper(tipo_identificacion), lower(numero_identificacion))`), independiente de `empresa_id`. | **Identidad desacoplada entre tenants**. |
+| `lealtad_cuentas` | Implementada (`000029`) | Billetera de puntos del miembro dentro de un programa (`UNIQUE (programa_id, miembro_id)`, `saldo_puntos >= 0`, `estado`: `ACTIVA`/`BLOQUEADA`/`CERRADA`). | **Materialized Balance**. |
+| `lealtad_reglas` | Implementada (`000028`) | Reglas de acumulación (`programa_id`, `empresa_id` opcional — `NULL` aplica a todo el programa, con valor aplica solo a esa empresa — `tipo_regla`: `POR_MONTO`/`BONO_FIJO`/`MULTIPLICADOR`, `puntos_por_monto`, `monto_base`, `compra_minima`, `moneda_id`, `prioridad`, vigencias y `deleted_at`). Incluye semilla de regla estándar para **`Lealtad Tesserak`** (1 punto por cada \$1.000). | **Rule Engine ligero (global u override por empresa)**. |
+| `lealtad_transacciones` | Implementada (`000030`) | Libro mayor inmutable de puntos (`cuenta_id`, `programa_id`, `empresa_id`, `sucursal_id`, `venta_id`, `regla_id`, `tipo_transaccion`, `puntos`, `saldo_posterior`, `fecha_vencimiento`, `observaciones`, `created_by`, `created_at`). Permite trazabilidad y conciliación entre empresas aliadas. | **Append-only Ledger multi-empresa**. |
+| `lealtad_redenciones` | Implementada (`000030`) | Registro de canje de puntos (`cuenta_id`, `transaccion_id` UQ, `empresa_id`, `sucursal_id`, `venta_id` opcional, `puntos_redimidos`, `monto_descontado`, `moneda_id`, `estado`, `observaciones`, `created_by`). | **Documento transaccional 1:1 con movimiento de ledger**. |
 
 ### 3.11 Secuencias y Consecutivos de Documentos
 

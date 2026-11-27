@@ -1,0 +1,861 @@
+<section class="lealtad-page">
+  <header class="page-header">
+    <div>
+      <h1>Planes de lealtad</h1>
+      <p class="subtitle">
+        Administra los programas de fidelización de tu empresa, sus reglas de acumulación y la adhesión al plan global
+        <strong>Lealtad Tesserak</strong>.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarProgramas()" [disabled]="loading()">
+        {{ loading() ? 'Actualizando...' : 'Actualizar' }}
+      </button>
+      <button type="button" class="btn-primary" (click)="abrirCrearPlan()">
+        + Nuevo plan de lealtad
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  @if (planDefecto(); as defecto) {
+    <section class="featured-plan" aria-label="Plan de lealtad por defecto">
+      <div class="featured-plan-info">
+        <div class="featured-badges">
+          <span class="pill system">Plan por defecto</span>
+          <span class="pill global">Global</span>
+          <span class="status-badge" [class.active]="defecto.estado === 'ACTIVO'" [class.paused]="defecto.estado === 'PAUSADO'" [class.inactive]="defecto.estado === 'INACTIVO'">
+            {{ etiquetaEstado(defecto.estado) }}
+          </span>
+          @if (defecto.adhesion?.activo) {
+            <span class="pill adhered">Tu empresa está adherida</span>
+            @if (defecto.adhesion?.es_programa_principal) {
+              <span class="pill primary">Principal</span>
+            }
+          }
+        </div>
+        <h2>{{ defecto.nombre }} <span class="code-pill">{{ defecto.codigo }}</span></h2>
+        <p class="subtitle">
+          {{ defecto.descripcion || 'Plan de lealtad global por defecto de Tesserak al que las empresas pueden adherirse.' }}
+        </p>
+        <div class="featured-meta">
+          <span>
+            <strong>Administrador:</strong>
+            {{ defecto.usuario_administrador_username || 'ipalenciab' }}
+          </span>
+          <span>
+            <strong>Valor por punto:</strong>
+            {{ defecto.moneda_simbolo }} {{ defecto.valor_punto_redencion | number: '1.2-4' }} {{ defecto.moneda_codigo }}
+          </span>
+          <span>
+            <strong>Vencimiento:</strong>
+            {{ defecto.dias_vencimiento ? defecto.dias_vencimiento + ' días' : 'Sin vencimiento' }}
+          </span>
+          <span>
+            <strong>Empresas adheridas:</strong>
+            {{ defecto.empresas_adheridas_count }}
+          </span>
+        </div>
+      </div>
+
+      <div class="featured-actions">
+        @if (defecto.adhesion?.activo) {
+          <button type="button" class="btn-secondary" (click)="abrirModalAdhesion(defecto, true)">
+            Configurar adhesión
+          </button>
+          <button type="button" class="btn-warning" (click)="desadherirEmpresa(defecto)">
+            Retirar adhesión
+          </button>
+        } @else if (defecto.puede_adherir) {
+          <button type="button" class="btn-primary" (click)="abrirModalAdhesion(defecto, false)">
+            Adherir mi empresa
+          </button>
+        }
+
+        <button type="button" class="btn-secondary" (click)="abrirModalReglas(defecto)">
+          Reglas de acumulación
+        </button>
+
+        @if (defecto.puede_ver_empresas) {
+          <button type="button" class="btn-secondary" (click)="abrirEmpresasAdheridas(defecto)">
+            Ver empresas ({{ defecto.empresas_adheridas_count }})
+          </button>
+          <button type="button" class="btn-secondary" (click)="abrirConciliacion(defecto)">
+            Conciliación
+          </button>
+        }
+
+        @if (defecto.puede_editar) {
+          <button type="button" class="btn-secondary" (click)="abrirEditarPlan(defecto)">
+            Editar plan
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  <section class="panel" aria-label="Listado de planes de lealtad">
+    <div class="panel-header panel-header-row">
+      <div>
+        <h2>Catálogo de planes de lealtad</h2>
+        <p class="subtitle">
+          Planes globales disponibles para adhesión, alianzas de coalición y planes locales de tu empresa.
+        </p>
+      </div>
+
+      <div class="filters-bar">
+        <input
+          type="search"
+          placeholder="Buscar por nombre o código..."
+          [ngModel]="filtroSearch()"
+          (ngModelChange)="filtroSearch.set($event)"
+          (keyup.enter)="cargarProgramas()"
+        />
+        <select [ngModel]="filtroAlcance()" (ngModelChange)="filtroAlcance.set($event); cargarProgramas()">
+          <option value="">Todos los alcances</option>
+          <option value="GLOBAL">Global</option>
+          <option value="COALICION">Coalición</option>
+          <option value="LOCAL">Local</option>
+        </select>
+        <select [ngModel]="filtroEstado()" (ngModelChange)="filtroEstado.set($event); cargarProgramas()">
+          <option value="">Todos los estados</option>
+          <option value="ACTIVO">Activo</option>
+          <option value="PAUSADO">Pausado</option>
+          <option value="INACTIVO">Inactivo</option>
+        </select>
+        <label class="checkbox-inline">
+          <input
+            type="checkbox"
+            [ngModel]="filtroSoloAdheridos()"
+            (ngModelChange)="filtroSoloAdheridos.set($event); cargarProgramas()"
+          />
+          <span>Solo adheridos</span>
+        </label>
+        <button type="button" class="btn-secondary" (click)="cargarProgramas()">Filtrar</button>
+        @if (filtroSearch() || filtroAlcance() || filtroEstado() || filtroSoloAdheridos()) {
+          <button type="button" class="btn-secondary" (click)="limpiarFiltros()">Limpiar</button>
+        }
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando planes de lealtad...</div>
+    } @else if (programas().length === 0) {
+      <div class="empty-box">
+        No se encontraron planes de lealtad con los filtros seleccionados.
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Plan</th>
+              <th>Alcance</th>
+              <th>Administrado por</th>
+              <th>Valor punto</th>
+              <th>Vencimiento</th>
+              <th>Estado</th>
+              <th>Adhesión</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (plan of programas(); track plan.id) {
+              <tr>
+                <td>
+                  <div class="plan-name-cell">
+                    <strong>{{ plan.nombre }}</strong>
+                    <div class="plan-sub">
+                      <span class="code-pill">{{ plan.codigo }}</span>
+                      @if (plan.es_sistema) {
+                        <span class="pill system">Por defecto</span>
+                      }
+                      @if (plan.adhesion?.activo && plan.adhesion?.es_programa_principal) {
+                        <span class="pill primary">Principal</span>
+                      }
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span class="pill" [class.global]="plan.alcance === 'GLOBAL'" [class.coalicion]="plan.alcance === 'COALICION'" [class.local]="plan.alcance === 'LOCAL'">
+                    {{ etiquetaAlcance(plan.alcance) }}
+                  </span>
+                </td>
+                <td>
+                  @if (plan.alcance === 'GLOBAL') {
+                    <span>{{ plan.usuario_administrador_username || 'ipalenciab' }}</span>
+                  } @else {
+                    <span>{{ plan.empresa_propietaria_nombre || 'Mi empresa' }}</span>
+                  }
+                </td>
+                <td class="nowrap">
+                  {{ plan.moneda_simbolo }} {{ plan.valor_punto_redencion | number: '1.2-4' }}
+                  <small class="muted">{{ plan.moneda_codigo }}</small>
+                </td>
+                <td class="nowrap">
+                  {{ plan.dias_vencimiento ? plan.dias_vencimiento + ' días' : 'Sin vencimiento' }}
+                </td>
+                <td>
+                  <span
+                    class="status-badge"
+                    [class.active]="plan.estado === 'ACTIVO'"
+                    [class.paused]="plan.estado === 'PAUSADO'"
+                    [class.inactive]="plan.estado === 'INACTIVO'"
+                  >
+                    {{ etiquetaEstado(plan.estado) }}
+                  </span>
+                </td>
+                <td>
+                  @if (plan.adhesion?.activo) {
+                    <div class="adhesion-cell">
+                      <span class="status-badge active">Adherida</span>
+                      <small class="muted">
+                        {{ plan.adhesion?.permite_acumular ? 'Acumula' : 'Sin acumular' }} ·
+                        {{ plan.adhesion?.permite_redimir ? 'Redime' : 'Sin redimir' }}
+                      </small>
+                    </div>
+                  } @else {
+                    <span class="status-badge inactive">No adherida</span>
+                  }
+                </td>
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      (click)="abrirModalReglas(plan)"
+                    >
+                      Reglas
+                    </button>
+
+                    @if (plan.adhesion?.activo) {
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        (click)="abrirModalAdhesion(plan, true)"
+                      >
+                        Adhesión
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon warning"
+                        (click)="desadherirEmpresa(plan)"
+                      >
+                        Retirar
+                      </button>
+                    } @else if (plan.puede_adherir) {
+                      <button
+                        type="button"
+                        class="btn-icon success"
+                        (click)="abrirModalAdhesion(plan, false)"
+                      >
+                        Adherir
+                      </button>
+                    }
+
+                    @if (plan.puede_ver_empresas) {
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        (click)="abrirEmpresasAdheridas(plan)"
+                      >
+                        Empresas ({{ plan.empresas_adheridas_count }})
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        (click)="abrirConciliacion(plan)"
+                      >
+                        Conciliación
+                      </button>
+                    }
+
+                    @if (plan.puede_editar) {
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        (click)="abrirEditarPlan(plan)"
+                      >
+                        Editar
+                      </button>
+                    }
+
+                    @if (plan.puede_eliminar) {
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="eliminarPlan(plan)"
+                      >
+                        Eliminar
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <!-- Modal Crear / Editar Plan -->
+  @if (modalPlanAbierto()) {
+    <div class="modal-backdrop" (click)="cerrarModalPlan()">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>{{ planEditando() ? 'Editar plan de lealtad' : 'Nuevo plan de lealtad' }}</h3>
+            <p class="subtitle">
+              Define los parámetros base de redención, vigencia y alcance del programa.
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarModalPlan()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="planForm" (ngSubmit)="guardarPlan()">
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Código *</span>
+              <input type="text" formControlName="codigo" maxlength="30" placeholder="Ej: CLUB_VIP" />
+              @if (planForm.controls.codigo.touched && planForm.controls.codigo.invalid) {
+                <small class="field-error">Ingresa un código (2 a 30 caracteres).</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Nombre del plan *</span>
+              <input type="text" formControlName="nombre" maxlength="100" placeholder="Ej: Club Puntos VIP" />
+              @if (planForm.controls.nombre.touched && planForm.controls.nombre.invalid) {
+                <small class="field-error">Ingresa un nombre válido.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Alcance *</span>
+              <select formControlName="alcance">
+                <option value="LOCAL">Local (solo mi empresa)</option>
+                <option value="COALICION">Coalición (varias empresas aliadas)</option>
+                @if (esAdminGlobal() || planEditando()?.alcance === 'GLOBAL') {
+                  <option value="GLOBAL">Global (plataforma Tesserak)</option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Estado *</span>
+              <select formControlName="estado">
+                <option value="ACTIVO">Activo</option>
+                <option value="PAUSADO">Pausado</option>
+                <option value="INACTIVO">Inactivo</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Moneda de referencia *</span>
+              <select formControlName="moneda_referencia_id">
+                @for (m of monedas(); track m.id) {
+                  <option [ngValue]="m.id">{{ m.codigo_iso }} — {{ m.nombre_moneda }} ({{ m.simbolo }})</option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Valor de redención por punto *</span>
+              <input type="number" step="0.01" min="0.0001" formControlName="valor_punto_redencion" />
+              @if (planForm.controls.valor_punto_redencion.touched && planForm.controls.valor_punto_redencion.invalid) {
+                <small class="field-error">Debe ser mayor a 0.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Días de vencimiento (opcional)</span>
+              <input type="number" min="1" formControlName="dias_vencimiento" placeholder="Vacío = no vencen" />
+            </label>
+
+            <label class="field">
+              <span>Fecha inicio</span>
+              <input type="date" formControlName="fecha_inicio" />
+            </label>
+
+            <label class="field">
+              <span>Fecha fin (opcional)</span>
+              <input type="date" formControlName="fecha_fin" />
+            </label>
+
+            <label class="field full">
+              <span>Descripción</span>
+              <textarea rows="3" formControlName="descripcion" placeholder="Condiciones generales del plan..."></textarea>
+            </label>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarModalPlan()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Guardando...' : (planEditando() ? 'Guardar cambios' : 'Crear plan') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Adherir / Configurar Adhesión -->
+  @if (modalAdhesionAbierto() && planAdhesion(); as plan) {
+    <div class="modal-backdrop" (click)="cerrarModalAdhesion()">
+      <div class="modal-card modal-sm" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>{{ editandoAdhesion() ? 'Configurar adhesión' : 'Adherir empresa al plan' }}</h3>
+            <p class="subtitle">{{ plan.nombre }} ({{ plan.codigo }})</p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarModalAdhesion()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="adhesionForm" (ngSubmit)="guardarAdhesion()">
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <label class="checkbox-card">
+            <input type="checkbox" formControlName="permite_acumular" />
+            <div>
+              <strong>Permitir acumulación de puntos</strong>
+              <small>Los clientes acumulan puntos al comprar en tu empresa.</small>
+            </div>
+          </label>
+
+          <label class="checkbox-card">
+            <input type="checkbox" formControlName="permite_redimir" />
+            <div>
+              <strong>Permitir redención de puntos</strong>
+              <small>Los clientes pueden redimir sus puntos acumulados en tus ventas.</small>
+            </div>
+          </label>
+
+          <label class="checkbox-card">
+            <input type="checkbox" formControlName="es_programa_principal" />
+            <div>
+              <strong>Establecer como plan principal de la empresa</strong>
+              <small>Se seleccionará por defecto en las operaciones de lealtad.</small>
+            </div>
+          </label>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarModalAdhesion()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Guardando...' : (editandoAdhesion() ? 'Guardar configuración' : 'Confirmar adhesión') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Empresas Adheridas -->
+  @if (modalEmpresasAbierto() && planEmpresas(); as plan) {
+    <div class="modal-backdrop" (click)="cerrarModalEmpresas()">
+      <div class="modal-card modal-lg" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Empresas adheridas — {{ plan.nombre }}</h3>
+            <p class="subtitle">Empresas participantes en este plan de lealtad.</p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarModalEmpresas()" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          @if (loadingEmpresas()) {
+            <div class="empty-box">Cargando empresas adheridas...</div>
+          } @else if (empresasAdheridas().length === 0) {
+            <div class="empty-box">Aún no hay empresas adheridas a este plan.</div>
+          } @else {
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Empresa</th>
+                    <th>NIT / ID</th>
+                    <th>Rol</th>
+                    <th>Permisos</th>
+                    <th>Fecha adhesión</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (emp of empresasAdheridas(); track emp.id) {
+                    <tr>
+                      <td>
+                        <strong>{{ emp.empresa_nombre || 'Empresa #' + emp.empresa_id }}</strong>
+                        @if (emp.es_programa_principal && emp.activo) {
+                          <span class="pill primary">Principal</span>
+                        }
+                      </td>
+                      <td>{{ emp.empresa_nit || '—' }}</td>
+                      <td>{{ emp.rol_empresa }}</td>
+                      <td>
+                        {{ emp.permite_acumular ? 'Acumula' : 'No acumula' }} ·
+                        {{ emp.permite_redimir ? 'Redime' : 'No redime' }}
+                      </td>
+                      <td class="nowrap">{{ emp.fecha_adhesion | date: 'yyyy-MM-dd HH:mm' }}</td>
+                      <td>
+                        <span class="status-badge" [class.active]="emp.activo" [class.inactive]="!emp.activo">
+                          {{ emp.activo ? 'Activa' : 'Retirada' }}
+                        </span>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalEmpresas()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Reglas de Acumulación -->
+  @if (modalReglasAbierto() && planReglas(); as plan) {
+    <div class="modal-backdrop" (click)="cerrarModalReglas()">
+      <div class="modal-card modal-xl" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Reglas de acumulación — {{ plan.nombre }}</h3>
+            <p class="subtitle">
+              Configura cómo se acumulan puntos en este plan (menor prioridad numérica se evalúa primero).
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarModalReglas()" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          @if (mostrandoFormRegla()) {
+            <form class="regla-form-box" [formGroup]="reglaForm" (ngSubmit)="guardarRegla()" novalidate>
+              <div class="regla-form-header">
+                <h4>{{ reglaEditando() ? 'Editar regla de acumulación' : 'Nueva regla de acumulación' }}</h4>
+                <button type="button" class="btn-secondary" (click)="cancelarFormRegla()">Volver al listado</button>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Nombre de la regla *</span>
+                  <input type="text" formControlName="nombre" maxlength="100" placeholder="Ej: 1 punto por cada $1.000" />
+                  @if (reglaForm.controls.nombre.touched && reglaForm.controls.nombre.invalid) {
+                    <small class="field-error">Ingresa un nombre (mínimo 2 caracteres).</small>
+                  }
+                </label>
+
+                <label class="field">
+                  <span>Aplicación</span>
+                  <select formControlName="es_global">
+                    @if (puedeCrearReglaGlobal() || reglaEditando()?.es_global) {
+                      <option [ngValue]="true">Global del plan (todas las empresas)</option>
+                    }
+                    @if (puedeCrearReglaEmpresa() || (reglaEditando() && !reglaEditando()?.es_global)) {
+                      <option [ngValue]="false">Específica de mi empresa</option>
+                    }
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Tipo de regla *</span>
+                  <select formControlName="tipo_regla">
+                    <option value="POR_MONTO">Por monto de compra</option>
+                    <option value="BONO_FIJO">Bono fijo por venta</option>
+                    <option value="MULTIPLICADOR">Multiplicador de puntos</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Moneda *</span>
+                  <select formControlName="moneda_id">
+                    @for (m of monedas(); track m.id) {
+                      <option [ngValue]="m.id">{{ m.codigo_iso }} ({{ m.simbolo }})</option>
+                    }
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>
+                    @if (reglaForm.controls.tipo_regla.value === 'MULTIPLICADOR') {
+                      Factor multiplicador *
+                    } @else if (reglaForm.controls.tipo_regla.value === 'BONO_FIJO') {
+                      Puntos de bono *
+                    } @else {
+                      Puntos otorgados *
+                    }
+                  </span>
+                  <input type="number" step="any" min="0.0001" formControlName="puntos_por_monto" />
+                  @if (reglaForm.controls.puntos_por_monto.touched && reglaForm.controls.puntos_por_monto.invalid) {
+                    <small class="field-error">Debe ser mayor a 0.</small>
+                  }
+                </label>
+
+                @if (reglaForm.controls.tipo_regla.value === 'POR_MONTO') {
+                  <label class="field">
+                    <span>Por cada monto base *</span>
+                    <input type="number" step="any" min="0.0001" formControlName="monto_base" />
+                  </label>
+                }
+
+                <label class="field">
+                  <span>Compra mínima (opcional)</span>
+                  <input type="number" step="any" min="0" formControlName="compra_minima" />
+                </label>
+
+                <label class="field">
+                  <span>Prioridad (1 = máxima) *</span>
+                  <input type="number" step="1" min="1" formControlName="prioridad" />
+                  @if (reglaForm.controls.prioridad.touched && reglaForm.controls.prioridad.invalid) {
+                    <small class="field-error">Debe ser un entero mayor o igual a 1.</small>
+                  }
+                </label>
+
+                <label class="field">
+                  <span>Fecha inicio</span>
+                  <input type="date" formControlName="fecha_inicio" />
+                </label>
+
+                <label class="field">
+                  <span>Fecha fin (opcional)</span>
+                  <input type="date" formControlName="fecha_fin" />
+                </label>
+
+                <label class="checkbox-inline field full">
+                  <input type="checkbox" formControlName="activo" />
+                  <span>Regla activa</span>
+                </label>
+              </div>
+
+              <div class="regla-form-actions">
+                <button type="button" class="btn-secondary" (click)="cancelarFormRegla()">Cancelar</button>
+                <button type="submit" class="btn-primary" [disabled]="saving()">
+                  {{ saving() ? 'Guardando...' : (reglaEditando() ? 'Guardar regla' : 'Crear regla') }}
+                </button>
+              </div>
+            </form>
+          } @else {
+            <div class="reglas-toolbar">
+              <span class="subtitle">
+                @if (puedeCrearReglaGlobal()) {
+                  Puedes gestionar las reglas globales del plan y crear reglas específicas.
+                } @else if (puedeCrearReglaEmpresa()) {
+                  Las reglas globales son informativas; puedes crear reglas propias para tu empresa.
+                } @else {
+                  Adhiere tu empresa a este plan si deseas crear reglas personalizadas para tu empresa.
+                }
+              </span>
+
+              @if (puedeCrearReglaGlobal() || puedeCrearReglaEmpresa()) {
+                <button type="button" class="btn-primary" (click)="abrirCrearRegla()">
+                  + Nueva regla
+                </button>
+              }
+            </div>
+
+            @if (loadingReglas()) {
+              <div class="empty-box">Cargando reglas de acumulación...</div>
+            } @else if (reglas().length === 0) {
+              <div class="empty-box">Este plan aún no tiene reglas de acumulación configuradas.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Regla</th>
+                      <th>Ámbito</th>
+                      <th>Fórmula</th>
+                      <th>Compra mín.</th>
+                      <th>Prioridad</th>
+                      <th>Estado</th>
+                      <th class="actions-col">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (r of reglas(); track r.id) {
+                      <tr>
+                        <td>
+                          <strong>{{ r.nombre }}</strong>
+                          <div><small class="muted">{{ etiquetaTipoRegla(r.tipo_regla) }}</small></div>
+                        </td>
+                        <td>
+                          @if (r.es_global) {
+                            <span class="pill global">Plan global</span>
+                          } @else {
+                            <span class="pill coalicion">{{ r.empresa_nombre || 'Mi empresa' }}</span>
+                          }
+                        </td>
+                        <td class="nowrap">{{ resumenFormulaRegla(r) }}</td>
+                        <td class="nowrap">
+                          {{ r.compra_minima > 0 ? (r.moneda_simbolo || '$') + ' ' + (r.compra_minima | number: '1.0-2') : 'Sin mínimo' }}
+                        </td>
+                        <td>{{ r.prioridad }}</td>
+                        <td>
+                          <span class="status-badge" [class.active]="r.activo" [class.inactive]="!r.activo">
+                            {{ r.activo ? 'Activa' : 'Inactiva' }}
+                          </span>
+                        </td>
+                        <td class="actions-col">
+                          <div class="row-actions">
+                            @if (r.puede_editar) {
+                              <button type="button" class="btn-icon" (click)="abrirEditarRegla(r)">Editar</button>
+                            }
+                            @if (r.puede_eliminar) {
+                              <button type="button" class="btn-icon danger" (click)="eliminarRegla(r)">Eliminar</button>
+                            }
+                            @if (!r.puede_editar && !r.puede_eliminar) {
+                              <span class="muted">Solo lectura</span>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModalReglas()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Conciliación de Coalición y Vencimientos -->
+  @if (modalConciliacionAbierto() && planConciliacion(); as plan) {
+    <div class="modal-backdrop" (click)="cerrarConciliacion()">
+      <div class="modal-card modal-xl" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Conciliación y vencimientos — {{ plan.nombre }}</h3>
+            <p class="subtitle">
+              Balance de puntos emitidos vs. redimidos por cada empresa participante en el plan.
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarConciliacion()" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <div class="reglas-toolbar">
+            <div class="filters-bar">
+              <label class="checkbox-inline">
+                <span>Desde</span>
+                <input
+                  type="date"
+                  [ngModel]="conciliacionDesde()"
+                  (ngModelChange)="conciliacionDesde.set($event)"
+                />
+              </label>
+              <label class="checkbox-inline">
+                <span>Hasta</span>
+                <input
+                  type="date"
+                  [ngModel]="conciliacionHasta()"
+                  (ngModelChange)="conciliacionHasta.set($event)"
+                />
+              </label>
+              <button type="button" class="btn-secondary" (click)="cargarConciliacion()" [disabled]="loadingConciliacion()">
+                Consultar
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="btn-warning"
+              (click)="ejecutarVencimientos(plan)"
+              [disabled]="procesandoVencimientos()"
+            >
+              {{ procesandoVencimientos() ? 'Procesando...' : 'Procesar vencimientos' }}
+            </button>
+          </div>
+
+          @if (loadingConciliacion()) {
+            <div class="empty-box">Calculando conciliación del plan...</div>
+          } @else if (conciliacionData(); as rep) {
+            <div class="featured-meta" style="margin-bottom: 1rem;">
+              <span><strong>Total emitidos:</strong> {{ rep.total_emitidos | number }} pts</span>
+              <span><strong>Total redimidos:</strong> {{ rep.total_redimidos | number }} pts</span>
+              <span><strong>Total vencidos:</strong> {{ rep.total_vencidos | number }} pts</span>
+              <span>
+                <strong>Valor por punto:</strong>
+                {{ rep.moneda_simbolo || '$' }} {{ rep.valor_punto_redencion | number: '1.2-4' }} {{ rep.moneda_codigo }}
+              </span>
+            </div>
+
+            @if (rep.empresas.length === 0) {
+              <div class="empty-box">No hay transacciones registradas en el período seleccionado.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Empresa</th>
+                      <th>NIT / ID</th>
+                      <th>Emitidos</th>
+                      <th>Redimidos</th>
+                      <th>Reversos</th>
+                      <th>Vencidos</th>
+                      <th>Balance neto</th>
+                      <th>Valor neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (e of rep.empresas; track e.empresa_id) {
+                      <tr>
+                        <td><strong>{{ e.empresa_nombre }}</strong></td>
+                        <td>{{ e.empresa_nit }}</td>
+                        <td class="nowrap">+{{ e.puntos_emitidos | number }} pts</td>
+                        <td class="nowrap">-{{ e.puntos_redimidos | number }} pts</td>
+                        <td class="nowrap">{{ e.puntos_reversados | number }} pts</td>
+                        <td class="nowrap">{{ e.puntos_vencidos | number }} pts</td>
+                        <td class="nowrap"><strong>{{ e.balance_neto_puntos | number }} pts</strong></td>
+                        <td class="nowrap">
+                          {{ rep.moneda_simbolo || '$' }} {{ e.valor_neto | number: '1.0-2' }} {{ rep.moneda_codigo }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarConciliacion()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  }
+</section>

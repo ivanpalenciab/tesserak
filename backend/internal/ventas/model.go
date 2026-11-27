@@ -74,6 +74,8 @@ type Venta struct {
 	FechaVencimiento *time.Time     `gorm:"column:fecha_vencimiento"`
 	Subtotal         float64        `gorm:"column:subtotal;not null"`
 	TotalIVA         float64        `gorm:"column:total_iva;not null"`
+	PuntosRedimidos  int64          `gorm:"column:puntos_redimidos;not null"`
+	DescuentoLealtad float64        `gorm:"column:descuento_lealtad;not null"`
 	Total            float64        `gorm:"column:total;not null"`
 	Observaciones    *string        `gorm:"column:observaciones"`
 	UsuarioID        int64          `gorm:"column:usuario_id;not null"`

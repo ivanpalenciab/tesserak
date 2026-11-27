@@ -1,0 +1,663 @@
+<section class="lealtad-op-page">
+  <header class="page-header">
+    <div>
+      <h1>Lealtad — Miembros y cuentas</h1>
+      <p class="subtitle">
+        Gestiona los clientes inscritos en los planes de lealtad activos de tu empresa y consulta sus saldos de puntos.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cargarCuentas()" [disabled]="loading()">
+        {{ loading() ? 'Actualizando...' : 'Actualizar' }}
+      </button>
+      <button
+        type="button"
+        class="btn-secondary"
+        (click)="abrirInscribirDesdeTercero()"
+        [disabled]="programas().length === 0"
+      >
+        + Inscribir cliente (Terceros)
+      </button>
+      <button
+        type="button"
+        class="btn-primary"
+        (click)="abrirRegistroMiembro()"
+        [disabled]="programas().length === 0"
+      >
+        + Registrar miembro
+      </button>
+    </div>
+  </header>
+
+  @if (exitoMensaje(); as msg) {
+    <div class="alert success" role="status">{{ msg }}</div>
+  }
+
+  @if (errorMensaje(); as err) {
+    <div class="alert error" role="alert">{{ err }}</div>
+  }
+
+  @if (!loading() && programas().length === 0) {
+    <div class="alert info">
+      Tu empresa aún no está adherida a ningún plan de lealtad activo.
+      @if (esAdministrador()) {
+        Ve a <a routerLink="/administracion/planes-lealtad">Administración → Planes de lealtad</a> para adherirte a
+        <strong>Lealtad Tesserak</strong> o crear un plan propio.
+      } @else {
+        Solicita al administrador de tu empresa que adhiera la empresa a un plan de lealtad.
+      }
+    </div>
+  }
+
+  <div class="kpi-grid">
+    <article class="kpi-card">
+      <span class="kpi-label">Planes activos adheridos</span>
+      <strong class="kpi-value">{{ programas().length }}</strong>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-label">Cuentas registradas</span>
+      <strong class="kpi-value">{{ totalCuentas() }}</strong>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-label">Cuentas activas</span>
+      <strong class="kpi-value">{{ cuentasActivas() }}</strong>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-label">Puntos acumulados</span>
+      <strong class="kpi-value">{{ totalPuntos() | number }} pts</strong>
+    </article>
+  </div>
+
+  <section class="panel" aria-label="Listado de cuentas de lealtad">
+    <div class="panel-header panel-header-row">
+      <div>
+        <h2>Cuentas de puntos</h2>
+        <p class="subtitle">
+          Billeteras de puntos asociadas a los planes en los que participa tu empresa.
+        </p>
+      </div>
+
+      <div class="filters-bar">
+        <input
+          type="search"
+          placeholder="Buscar por nombre, documento o email..."
+          [ngModel]="filtroSearch()"
+          (ngModelChange)="filtroSearch.set($event)"
+          (keyup.enter)="cargarCuentas()"
+        />
+        <select
+          [ngModel]="filtroProgramaId()"
+          (ngModelChange)="filtroProgramaId.set($event ? +$event : null); cargarCuentas()"
+        >
+          <option [ngValue]="null">Todos los planes</option>
+          @for (p of programas(); track p.id) {
+            <option [ngValue]="p.id">{{ p.nombre }} ({{ p.codigo }})</option>
+          }
+        </select>
+        <select [ngModel]="filtroEstado()" (ngModelChange)="filtroEstado.set($event); cargarCuentas()">
+          <option value="">Todos los estados</option>
+          <option value="ACTIVA">Activa</option>
+          <option value="BLOQUEADA">Bloqueada</option>
+          <option value="CERRADA">Cerrada</option>
+        </select>
+        <button type="button" class="btn-secondary" (click)="cargarCuentas()">Filtrar</button>
+        @if (filtroSearch() || filtroProgramaId() || filtroEstado()) {
+          <button type="button" class="btn-secondary" (click)="limpiarFiltros()">Limpiar</button>
+        }
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-box">Cargando cuentas de lealtad...</div>
+    } @else if (cuentas().length === 0) {
+      <div class="empty-box">
+        No hay miembros registrados aún en los planes de tu empresa. Usa <strong>+ Inscribir cliente (Terceros)</strong>
+        o <strong>+ Registrar miembro</strong> para comenzar.
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Miembro</th>
+              <th>Documento</th>
+              <th>Contacto</th>
+              <th>Plan</th>
+              <th>Saldo de puntos</th>
+              <th>Valor estimado</th>
+              <th>Estado</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of cuentas(); track c.id) {
+              <tr>
+                <td><strong>{{ c.miembro_nombre }}</strong></td>
+                <td class="nowrap">
+                  <span class="code-pill">{{ c.miembro_tipo_doc }}</span>
+                  {{ c.miembro_num_doc }}
+                  @if (c.miembro_pais_iso) {
+                    <small class="muted">· {{ c.miembro_pais_iso }}</small>
+                  }
+                </td>
+                <td>
+                  <div>{{ c.miembro_email || '—' }}</div>
+                  @if (c.miembro_telefono) {
+                    <small class="muted">{{ c.miembro_telefono }}</small>
+                  }
+                </td>
+                <td>
+                  <div><strong>{{ c.programa_nombre }}</strong></div>
+                  <small class="muted">{{ c.programa_codigo }} · {{ c.programa_alcance }}</small>
+                </td>
+                <td class="nowrap">
+                  <strong class="points-value">{{ c.saldo_puntos | number }} pts</strong>
+                </td>
+                <td class="nowrap">
+                  {{ c.moneda_simbolo || '$' }} {{ c.valor_estimado_saldo | number: '1.0-2' }}
+                  <small class="muted">{{ c.moneda_codigo }}</small>
+                </td>
+                <td>
+                  <span
+                    class="status-badge"
+                    [class.active]="c.estado === 'ACTIVA'"
+                    [class.paused]="c.estado === 'BLOQUEADA'"
+                    [class.inactive]="c.estado === 'CERRADA'"
+                  >
+                    {{ etiquetaEstado(c.estado) }}
+                  </span>
+                </td>
+                <td class="actions-col">
+                  <div class="row-actions">
+                    <button type="button" class="btn-icon" (click)="abrirMovimientos(c)">
+                      Movimientos
+                    </button>
+                    @if (c.estado === 'ACTIVA') {
+                      <button type="button" class="btn-icon success" (click)="abrirAcumular(c)">
+                        + Puntos
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        (click)="abrirRedimir(c)"
+                        [disabled]="c.saldo_puntos <= 0"
+                      >
+                        Redimir
+                      </button>
+                    }
+                    <button type="button" class="btn-icon" (click)="abrirEditarMiembro(c)">
+                      Editar
+                    </button>
+                    @if (c.estado === 'ACTIVA') {
+                      <button
+                        type="button"
+                        class="btn-icon warning"
+                        (click)="cambiarEstadoCuenta(c, 'BLOQUEADA')"
+                      >
+                        Bloquear
+                      </button>
+                    } @else if (c.estado === 'BLOQUEADA') {
+                      <button
+                        type="button"
+                        class="btn-icon success"
+                        (click)="cambiarEstadoCuenta(c, 'ACTIVA')"
+                      >
+                        Reactivar
+                      </button>
+                    }
+                    @if (c.estado !== 'CERRADA') {
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="cambiarEstadoCuenta(c, 'CERRADA')"
+                      >
+                        Cerrar
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <!-- Modal Registrar Miembro -->
+  @if (modalRegistroAbierto()) {
+    <div class="modal-backdrop" (click)="cerrarRegistroMiembro()">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Registrar miembro y abrir cuenta</h3>
+            <p class="subtitle">
+              Si el documento ya existe en la red (ej. Lealtad Tesserak), se vinculará su identidad global sin duplicarlo.
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarRegistroMiembro()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="registroForm" (ngSubmit)="guardarRegistroMiembro()" novalidate>
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+          @if (miembroEncontradoAviso(); as aviso) {
+            <div class="alert info">{{ aviso }}</div>
+          }
+
+          <div class="form-grid">
+            <label class="field full">
+              <span>Plan de lealtad *</span>
+              <select formControlName="programa_id">
+                @for (p of programas(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.nombre }} ({{ p.codigo }} · {{ p.alcance }})</option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>País del documento *</span>
+              <select formControlName="pais_id">
+                @for (pais of paises(); track pais.id) {
+                  <option [ngValue]="pais.id">{{ pais.nombre }} ({{ pais.iso_alpha_2 }})</option>
+                }
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Tipo de documento *</span>
+              <select formControlName="tipo_identificacion">
+                @for (td of tiposDocumento; track td) {
+                  <option [value]="td">{{ td }}</option>
+                }
+              </select>
+            </label>
+
+            <div class="field full">
+              <span>Número de documento *</span>
+              <div class="input-with-btn">
+                <input
+                  type="text"
+                  formControlName="numero_identificacion"
+                  maxlength="50"
+                  placeholder="Ej: 1020304050"
+                />
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  (click)="buscarDocumentoGlobal()"
+                  [disabled]="buscandoDoc()"
+                >
+                  {{ buscandoDoc() ? 'Buscando...' : 'Buscar existente' }}
+                </button>
+              </div>
+              @if (registroForm.controls.numero_identificacion.touched && registroForm.controls.numero_identificacion.invalid) {
+                <small class="field-error">Ingresa un número de documento válido.</small>
+              }
+            </div>
+
+            <label class="field full">
+              <span>Nombre completo *</span>
+              <input type="text" formControlName="nombre_completo" maxlength="200" placeholder="Nombre y apellidos" />
+              @if (registroForm.controls.nombre_completo.touched && registroForm.controls.nombre_completo.invalid) {
+                <small class="field-error">Ingresa el nombre completo del miembro.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Correo electrónico (opcional)</span>
+              <input type="email" formControlName="email" maxlength="255" placeholder="cliente@correo.com" />
+              @if (registroForm.controls.email.touched && registroForm.controls.email.invalid) {
+                <small class="field-error">Ingresa un correo válido.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Teléfono (opcional)</span>
+              <input type="text" formControlName="telefono" maxlength="50" placeholder="Ej: 3001234567" />
+            </label>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarRegistroMiembro()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Inscribiendo...' : 'Registrar e inscribir' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Inscribir desde Terceros -->
+  @if (modalTerceroAbierto()) {
+    <div class="modal-backdrop" (click)="cerrarModalTercero()">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Inscribir cliente existente (Terceros)</h3>
+            <p class="subtitle">
+              Selecciona un cliente registrado en tu empresa para abrir su cuenta de puntos en un clic.
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarModalTercero()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="terceroForm" (ngSubmit)="guardarInscripcionTercero()" novalidate>
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <div class="form-grid">
+            <label class="field full">
+              <span>Plan de lealtad *</span>
+              <select formControlName="programa_id">
+                @for (p of programas(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.nombre }} ({{ p.codigo }})</option>
+                }
+              </select>
+            </label>
+
+            <div class="field full">
+              <span>Buscar cliente</span>
+              <div class="input-with-btn">
+                <input
+                  type="search"
+                  placeholder="Nombre, documento o email..."
+                  [ngModel]="filtroClienteSearch()"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="filtroClienteSearch.set($event)"
+                  (keyup.enter)="buscarClientesTerceros()"
+                />
+                <button type="button" class="btn-secondary" (click)="buscarClientesTerceros()" [disabled]="loadingClientes()">
+                  {{ loadingClientes() ? 'Buscando...' : 'Buscar' }}
+                </button>
+              </div>
+            </div>
+
+            <label class="field full">
+              <span>Cliente (rol CLIENTE) *</span>
+              <select formControlName="tercero_id">
+                <option [ngValue]="0" disabled>Selecciona un cliente...</option>
+                @for (cli of clientes(); track cli.id) {
+                  <option [ngValue]="cli.id">
+                    {{ cli.razon_social }} — {{ cli.tipo_identificacion }} {{ cli.numero_identificacion }}
+                  </option>
+                }
+              </select>
+              @if (clientes().length === 0 && !loadingClientes()) {
+                <small class="muted">No se encontraron clientes activos con rol CLIENTE.</small>
+              }
+            </label>
+
+            <label class="field full">
+              <span>País por defecto (si el cliente no tiene país asignado)</span>
+              <select formControlName="pais_id">
+                @for (pais of paises(); track pais.id) {
+                  <option [ngValue]="pais.id">{{ pais.nombre }} ({{ pais.iso_alpha_2 }})</option>
+                }
+              </select>
+            </label>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarModalTercero()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Inscribiendo...' : 'Inscribir cliente' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Editar Miembro -->
+  @if (modalEditarMiembroAbierto() && cuentaEditandoMiembro(); as cuenta) {
+    <div class="modal-backdrop" (click)="cerrarEditarMiembro()">
+      <div class="modal-card modal-sm" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Editar datos del miembro</h3>
+            <p class="subtitle">
+              {{ cuenta.miembro_tipo_doc }} {{ cuenta.miembro_num_doc }}
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarEditarMiembro()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="editarMiembroForm" (ngSubmit)="guardarEditarMiembro()" novalidate>
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <label class="field">
+            <span>Nombre completo *</span>
+            <input type="text" formControlName="nombre_completo" maxlength="200" />
+          </label>
+
+          <label class="field">
+            <span>Correo electrónico</span>
+            <input type="email" formControlName="email" maxlength="255" />
+          </label>
+
+          <label class="field">
+            <span>Teléfono</span>
+            <input type="text" formControlName="telefono" maxlength="50" />
+          </label>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarEditarMiembro()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Guardando...' : 'Guardar cambios' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Movimientos / Libro mayor -->
+  @if (modalMovimientosAbierto() && cuentaMovimientos(); as cuenta) {
+    <div class="modal-backdrop" (click)="cerrarMovimientos()">
+      <div class="modal-card modal-xl" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Movimientos — {{ cuenta.miembro_nombre }}</h3>
+            <p class="subtitle">
+              {{ cuenta.programa_nombre }} ({{ cuenta.programa_codigo }}) · Saldo actual:
+              <strong>{{ cuenta.saldo_puntos | number }} pts</strong>
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarMovimientos()" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          @if (loadingMovimientos()) {
+            <div class="empty-box">Cargando extracto de movimientos...</div>
+          } @else if (transacciones().length === 0) {
+            <div class="empty-box">Esta cuenta aún no registra movimientos de puntos.</div>
+          } @else {
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Empresa</th>
+                    <th>Tipo</th>
+                    <th>Puntos</th>
+                    <th>Saldo posterior</th>
+                    <th>Regla / Detalle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (tx of transacciones(); track tx.id) {
+                    <tr>
+                      <td class="nowrap">{{ tx.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
+                      <td>{{ tx.empresa_nombre || 'Empresa #' + tx.empresa_id }}</td>
+                      <td>
+                        <span
+                          class="status-badge"
+                          [class.active]="tx.puntos > 0"
+                          [class.paused]="tx.puntos < 0"
+                        >
+                          {{ etiquetaTipoTransaccion(tx.tipo_transaccion) }}
+                        </span>
+                      </td>
+                      <td class="nowrap">
+                        <strong [class.pts-pos]="tx.puntos > 0" [class.pts-neg]="tx.puntos < 0">
+                          {{ tx.puntos > 0 ? '+' + (tx.puntos | number) : (tx.puntos | number) }} pts
+                        </strong>
+                      </td>
+                      <td class="nowrap">{{ tx.saldo_posterior | number }} pts</td>
+                      <td>
+                        @if (tx.regla_nombre) {
+                          <div><small class="muted">Regla: {{ tx.regla_nombre }}</small></div>
+                        }
+                        @if (tx.observaciones) {
+                          <div>{{ tx.observaciones }}</div>
+                        } @else if (!tx.regla_nombre) {
+                          <span class="muted">—</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer modal-footer-plain">
+          <button type="button" class="btn-secondary" (click)="cerrarMovimientos()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Acumular / Ajustar puntos -->
+  @if (modalAcumularAbierto() && cuentaAcumular(); as cuenta) {
+    <div class="modal-backdrop" (click)="cerrarAcumular()">
+      <div class="modal-card modal-sm" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Acumular o ajustar puntos</h3>
+            <p class="subtitle">
+              {{ cuenta.miembro_nombre }} · {{ cuenta.programa_nombre }} (Saldo: {{ cuenta.saldo_puntos | number }} pts)
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarAcumular()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="acumularForm" (ngSubmit)="guardarAcumular()" novalidate>
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <div class="mode-tabs">
+            <button
+              type="button"
+              [class.active]="modoAcumular() === 'MONTO'"
+              (click)="modoAcumular.set('MONTO')"
+            >
+              Por monto de compra
+            </button>
+            <button
+              type="button"
+              [class.active]="modoAcumular() === 'PUNTOS'"
+              (click)="modoAcumular.set('PUNTOS')"
+            >
+              Ajuste manual de puntos
+            </button>
+          </div>
+
+          @if (modoAcumular() === 'MONTO') {
+            <label class="field">
+              <span>Monto de la compra ({{ cuenta.moneda_codigo || 'COP' }}) *</span>
+              <input type="number" step="any" min="1" formControlName="monto_compra" placeholder="Ej: 50000" />
+              <small class="muted">Se aplicarán automáticamente las reglas activas de {{ cuenta.programa_nombre }}.</small>
+            </label>
+          } @else {
+            <label class="field">
+              <span>Cantidad de puntos (positivo o negativo) *</span>
+              <input type="number" step="1" formControlName="puntos" placeholder="Ej: 50 o -20" />
+              <small class="muted">Usa valores negativos para descontar puntos por corrección.</small>
+            </label>
+          }
+
+          <label class="field">
+            <span>Observaciones (opcional)</span>
+            <input type="text" formControlName="observaciones" maxlength="500" placeholder="Motivo o referencia..." />
+          </label>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarAcumular()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Procesando...' : 'Registrar movimiento' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Modal Redimir puntos -->
+  @if (modalRedimirAbierto() && cuentaRedimir(); as cuenta) {
+    <div class="modal-backdrop" (click)="cerrarRedimir()">
+      <div class="modal-card modal-sm" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>Redimir puntos</h3>
+            <p class="subtitle">
+              {{ cuenta.miembro_nombre }} · Disponible: <strong>{{ cuenta.saldo_puntos | number }} pts</strong>
+            </p>
+          </div>
+          <button type="button" class="close-btn" (click)="cerrarRedimir()" aria-label="Cerrar">×</button>
+        </div>
+
+        <form class="modal-form" [formGroup]="redimirForm" (ngSubmit)="guardarRedimir()" novalidate>
+          @if (modalError(); as err) {
+            <div class="alert error" role="alert">{{ err }}</div>
+          }
+
+          <label class="field">
+            <span>Puntos a redimir *</span>
+            <input
+              type="number"
+              step="1"
+              min="1"
+              [max]="cuenta.saldo_puntos"
+              formControlName="puntos_redimidos"
+            />
+          </label>
+
+          <div class="redemption-preview">
+            <span>Equivalente en descuento</span>
+            <strong>
+              {{ cuenta.moneda_simbolo || '$' }}
+              {{ descuentoEstimadoRedencion() | number: '1.0-2' }}
+              {{ cuenta.moneda_codigo }}
+            </strong>
+          </div>
+
+          <label class="field">
+            <span>Observaciones (opcional)</span>
+            <input type="text" formControlName="observaciones" maxlength="500" placeholder="Ej: Canje en mostrador..." />
+          </label>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="cerrarRedimir()">Cancelar</button>
+            <button type="submit" class="btn-primary" [disabled]="saving()">
+              {{ saving() ? 'Redimiendo...' : 'Confirmar redención' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</section>

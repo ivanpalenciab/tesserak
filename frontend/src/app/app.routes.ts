@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
 import {
+  adminGuard,
   adminOrBranchAdminGuard,
   authGuard,
   comprasGuard,
@@ -179,6 +180,15 @@ export const routes: Routes = [
         title: 'Ventas — Tesserak',
       },
       {
+        path: 'lealtad',
+        canActivate: [operacionGuard],
+        loadComponent: () =>
+          import('./features/lealtad/miembros-cuentas/miembros-cuentas').then(
+            (m) => m.LealtadMiembrosCuentasComponent,
+          ),
+        title: 'Lealtad — Miembros y cuentas · Tesserak',
+      },
+      {
         path: 'inventario',
         canActivate: [operacionGuard],
         loadComponent: () =>
@@ -193,6 +203,15 @@ export const routes: Routes = [
             (m) => m.GestionEmpresaComponent,
           ),
         title: 'Gestión de empresa — Tesserak',
+      },
+      {
+        path: 'administracion/planes-lealtad',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/administracion/planes-lealtad/planes-lealtad').then(
+            (m) => m.PlanesLealtadComponent,
+          ),
+        title: 'Planes de lealtad — Administración · Tesserak',
       },
       {
         path: 'empresas',

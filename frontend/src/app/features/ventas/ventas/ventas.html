@@ -161,6 +161,12 @@
             Cliente: <strong>{{ det.cliente_nombre }}</strong>
             @if (det.cliente_identificacion) { ({{ det.cliente_identificacion }}) }
             · Ubicación: <strong>{{ det.ubicacion_nombre || '#' + det.ubicacion_id }}</strong>
+            @if ((det.descuento_lealtad ?? 0) > 0) {
+              · Redención lealtad:
+              <strong class="loyalty-discount">
+                {{ det.puntos_redimidos }} pts (-{{ formatearMonto(det.descuento_lealtad ?? 0) }})
+              </strong>
+            }
             @if (det.observaciones) { · {{ det.observaciones }} }
           </p>
         </div>
@@ -230,7 +236,7 @@
         <div class="form-grid">
           <label class="field">
             <span>Cliente *</span>
-            <select formControlName="cliente_id">
+            <select formControlName="cliente_id" (change)="onClienteChange()">
               <option [ngValue]="null">Seleccionar cliente...</option>
               @for (c of clientes(); track c.id) {
                 <option [ngValue]="c.id">
@@ -252,12 +258,27 @@
 
           <label class="field">
             <span>Fecha de venta *</span>
-            <input type="date" formControlName="fecha_venta" />
+            <input type="date" formControlName="fecha_venta" (change)="onFechaVentaChange()" />
           </label>
 
           <label class="field">
             <span>Fecha de vencimiento</span>
             <input type="date" formControlName="fecha_vencimiento" />
+          </label>
+
+          <label class="field">
+            <span>Lista de precios</span>
+            <select
+              [value]="listaPrecioSeleccionadaId() ?? ''"
+              (change)="onListaPrecioChange($any($event.target).value)"
+            >
+              <option value="">Sin lista (precio manual)</option>
+              @for (lp of listasPrecios(); track lp.id) {
+                <option [value]="lp.id">
+                  {{ lp.nombre }} ({{ lp.tipo_lista }}{{ lp.moneda_codigo ? ' · ' + lp.moneda_codigo : '' }})
+                </option>
+              }
+            </select>
           </label>
 
           <label class="field">
@@ -293,7 +314,7 @@
                 <div class="line-grid">
                   <label class="field span-2">
                     <span>Artículo *</span>
-                    <select formControlName="articulo_id">
+                    <select formControlName="articulo_id" (change)="onArticuloChange(i)">
                       <option [ngValue]="null">Seleccionar artículo...</option>
                       @for (art of articulos(); track art.id) {
                         <option [ngValue]="art.id">{{ art.codigo }} — {{ art.nombre }}</option>
@@ -303,7 +324,13 @@
 
                   <label class="field">
                     <span>Cantidad *</span>
-                    <input type="number" step="0.01" min="0.0001" formControlName="cantidad" />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.0001"
+                      formControlName="cantidad"
+                      (input)="onCantidadChange(i)"
+                    />
                   </label>
 
                   <label class="field">
@@ -333,9 +360,72 @@
             }
           </div>
 
+          @if (!editando() && empresaAdheridaLealtad()) {
+            <div class="loyalty-redeem-box">
+              <div class="loyalty-redeem-info">
+                <strong>
+                  Redención de puntos — {{ cuentaLealtadCliente()?.programa_nombre || planLealtadPrincipal()?.nombre }}
+                </strong>
+                @if (cargandoCuentaLealtad()) {
+                  <span>Consultando saldo de puntos del cliente...</span>
+                } @else if (esClienteConsumidorFinal()) {
+                  <span>Selecciona un cliente registrado (distinto de Consumidor Final) para redimir puntos.</span>
+                } @else if (cuentaLealtadCliente(); as lc) {
+                  <span>
+                    Saldo disponible: <strong>{{ lc.saldo_puntos }} pts</strong>
+                    ({{ lc.moneda_simbolo || '$' }} {{ lc.valor_punto_redencion }} / pt)
+                  </span>
+                } @else {
+                  <span>El cliente seleccionado no tiene cuenta activa en el plan de lealtad.</span>
+                }
+              </div>
+
+              @if (cuentaLealtadCliente(); as lc) {
+                @if (lc.permite_redimir && lc.saldo_puntos > 0) {
+                  <div class="loyalty-redeem-controls">
+                    <label class="checkbox-inline">
+                      <input
+                        type="checkbox"
+                        [checked]="redimirActivo()"
+                        (change)="onToggleRedimir($any($event.target).checked)"
+                      />
+                      <span>Redimir puntos</span>
+                    </label>
+                    @if (redimirActivo()) {
+                      <label class="field-inline">
+                        <span>Puntos</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          [max]="maxPuntosRedimibles()"
+                          [value]="puntosRedimir()"
+                          (input)="onPuntosRedimirChange($any($event.target).value)"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        class="btn-secondary"
+                        (click)="usarMaximosPuntos()"
+                        [disabled]="maxPuntosRedimibles() <= 0"
+                      >
+                        Usar máx ({{ maxPuntosRedimibles() }})
+                      </button>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          }
+
           <div class="totals-bar">
             <span>Subtotal: <strong>{{ formatearMonto(calcularSubtotal()) }}</strong></span>
             <span>IVA / Imp.: <strong>{{ formatearMonto(calcularIVA()) }}</strong></span>
+            @if (calcularDescuentoLealtad() > 0) {
+              <span class="loyalty-discount">
+                Desc. lealtad: <strong>- {{ formatearMonto(calcularDescuentoLealtad()) }}</strong>
+              </span>
+            }
             <span class="total-final">
               Total: <strong>{{ formatearMonto(calcularTotal()) }}</strong>
             </span>

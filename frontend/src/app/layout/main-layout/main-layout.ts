@@ -18,7 +18,7 @@ interface NavItem {
   icon: string;
   badge?: string;
   disabled?: boolean;
-  permission?: 'admin' | 'crm' | 'ventas' | 'compras' | 'terceros' | 'operacion';
+  permission?: 'admin' | 'admin_only' | 'crm' | 'ventas' | 'compras' | 'terceros' | 'operacion';
   children?: NavSubItem[];
 }
 
@@ -75,7 +75,7 @@ export class MainLayoutComponent {
           ],
         },
         { label: 'Ventas', route: '/ventas', icon: 'sales', permission: 'ventas' },
-        { label: 'Lealtad', icon: 'loyalty', disabled: true, badge: 'Pronto', permission: 'operacion' },
+        { label: 'Lealtad', route: '/lealtad', icon: 'loyalty', permission: 'operacion' },
       ],
     },
     {
@@ -101,6 +101,7 @@ export class MainLayoutComponent {
       title: 'Administración',
       items: [
         { label: 'Gestión de empresa', route: '/gestion-empresa', icon: 'company', permission: 'admin' },
+        { label: 'Planes de lealtad', route: '/administracion/planes-lealtad', icon: 'loyalty', permission: 'admin_only' },
         { label: 'Usuarios', route: '/usuarios', icon: 'users', permission: 'operacion' },
       ],
     },
@@ -108,6 +109,7 @@ export class MainLayoutComponent {
 
   readonly visibleNavSections = computed<NavSection[]>(() => {
     const canAdmin = this.auth.puedeAdministrarUsuarios();
+    const isAdminOnly = this.auth.esAdministrador();
     const canCRM = this.auth.puedeAccederCRM();
     const canVentas = this.auth.puedeAccederVentas();
     const canCompras = this.auth.puedeAccederCompras();
@@ -121,6 +123,8 @@ export class MainLayoutComponent {
           switch (item.permission) {
             case 'admin':
               return canAdmin;
+            case 'admin_only':
+              return isAdminOnly;
             case 'crm':
               return canCRM;
             case 'ventas':

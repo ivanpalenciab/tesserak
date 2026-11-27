@@ -25,6 +25,7 @@ type CrearVentaRequest struct {
 	FechaVenta       string              `json:"fecha_venta"       binding:"required"`
 	FechaVencimiento *string             `json:"fecha_vencimiento"`
 	Observaciones    *string             `json:"observaciones"     binding:"omitnil,max=5000"`
+	PuntosRedimir    *int64              `json:"puntos_redimir"    binding:"omitnil,gte=0"`
 	Detalles         []VentaDetalleInput `json:"detalles"          binding:"required,min=1,dive"`
 }
 
@@ -86,6 +87,8 @@ type VentaResponse struct {
 	FechaVencimiento     *time.Time             `json:"fecha_vencimiento"`
 	Subtotal             float64                `json:"subtotal"`
 	TotalIVA             float64                `json:"total_iva"`
+	PuntosRedimidos      int64                  `json:"puntos_redimidos"`
+	DescuentoLealtad     float64                `json:"descuento_lealtad"`
 	Total                float64                `json:"total"`
 	Observaciones        *string                `json:"observaciones"`
 	UsuarioID            int64                  `json:"usuario_id"`
@@ -116,6 +119,8 @@ func toResponse(v *Venta, includeDetalles bool) VentaResponse {
 		FechaVencimiento: v.FechaVencimiento,
 		Subtotal:         v.Subtotal,
 		TotalIVA:         v.TotalIVA,
+		PuntosRedimidos:  v.PuntosRedimidos,
+		DescuentoLealtad: v.DescuentoLealtad,
 		Total:            v.Total,
 		Observaciones:    v.Observaciones,
 		UsuarioID:        v.UsuarioID,

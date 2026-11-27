@@ -21,6 +21,7 @@ import (
 	"tesserak/backend/internal/database"
 	"tesserak/backend/internal/empresas"
 	"tesserak/backend/internal/inventario"
+	"tesserak/backend/internal/lealtad"
 	"tesserak/backend/internal/precios"
 	"tesserak/backend/internal/productos"
 	"tesserak/backend/internal/terceros"
@@ -104,6 +105,10 @@ func main() {
 	).RegisterRoutes(api)
 	ventas.NewHandler(
 		ventas.NewService(ventas.NewRepository(db)),
+		auth.RequireAuth(cfg.JWTSecret),
+	).RegisterRoutes(api)
+	lealtad.NewHandler(
+		lealtad.NewService(lealtad.NewRepository(db)),
 		auth.RequireAuth(cfg.JWTSecret),
 	).RegisterRoutes(api)
 

@@ -11,6 +11,10 @@ import { TercerosService } from '../../terceros/terceros.service';
 import { Tercero } from '../../terceros/terceros.models';
 import { InventarioService } from '../../inventario/inventario.service';
 import { Ubicacion } from '../../inventario/inventario.models';
+import { PreciosService } from '../../precios/precios.service';
+import { DetallePrecio, ListaPrecio } from '../../precios/precios.models';
+import { LealtadOperacionService } from '../../lealtad/lealtad.service';
+import { CuentaClienteLealtad, ProgramaOperacionLealtad } from '../../lealtad/lealtad.models';
 import { VentasService } from '../ventas.service';
 import {
   CrearVentaRequest,
@@ -40,6 +44,8 @@ export class VentasComponent implements OnInit {
   private readonly productosSvc = inject(ProductosService);
   private readonly tercerosSvc = inject(TercerosService);
   private readonly invSvc = inject(InventarioService);
+  private readonly preciosSvc = inject(PreciosService);
+  private readonly lealtadSvc = inject(LealtadOperacionService);
   private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
@@ -63,6 +69,25 @@ export class VentasComponent implements OnInit {
   readonly gruposImpuesto = signal<GrupoImpuesto[]>([]);
   readonly clientes = signal<Tercero[]>([]);
   readonly ubicaciones = signal<Ubicacion[]>([]);
+  readonly listasPrecios = signal<ListaPrecio[]>([]);
+  readonly listaPrecioSeleccionadaId = signal<number | null>(null);
+  readonly detallesPrecio = signal<DetallePrecio[]>([]);
+
+  // Lealtad del cliente seleccionado (para redención en nueva venta)
+  readonly programasLealtad = signal<ProgramaOperacionLealtad[]>([]);
+  readonly empresaAdheridaLealtad = computed(() =>
+    this.programasLealtad().some((p) => p.estado === 'ACTIVO' && p.permite_redimir),
+  );
+  readonly planLealtadPrincipal = computed(
+    () =>
+      this.programasLealtad().find((p) => p.estado === 'ACTIVO' && p.es_programa_principal) ??
+      this.programasLealtad().find((p) => p.estado === 'ACTIVO') ??
+      null,
+  );
+  readonly cuentaLealtadCliente = signal<CuentaClienteLealtad | null>(null);
+  readonly cargandoCuentaLealtad = signal(false);
+  readonly redimirActivo = signal(false);
+  readonly puntosRedimir = signal<number>(0);
 
   // Alertas
   readonly errorMensaje = signal<string | null>(null);
@@ -124,7 +149,13 @@ export class VentasComponent implements OnInit {
       ubicaciones: this.invSvc
         .listarUbicaciones(true)
         .pipe(catchError(() => of([] as Ubicacion[]))),
-    }).subscribe(({ articulos, gruposImpuesto, terceros, ubicaciones }) => {
+      listasPrecios: this.preciosSvc
+        .listarListas({ estado: true, page: 1, page_size: 100 })
+        .pipe(catchError(() => of({ data: [] as ListaPrecio[], page: 1, page_size: 100, total: 0 }))),
+      programasLealtad: this.lealtadSvc
+        .listarProgramasAdheridos()
+        .pipe(catchError(() => of([] as ProgramaOperacionLealtad[]))),
+    }).subscribe(({ articulos, gruposImpuesto, terceros, ubicaciones, listasPrecios, programasLealtad }) => {
       this.articulos.set(articulos.data ?? []);
       this.gruposImpuesto.set(gruposImpuesto);
       const soloClientes = (terceros.data ?? []).filter((t) =>
@@ -132,7 +163,109 @@ export class VentasComponent implements OnInit {
       );
       this.clientes.set(soloClientes);
       this.ubicaciones.set(ubicaciones);
+      this.programasLealtad.set(programasLealtad ?? []);
+
+      const listas = listasPrecios.data ?? [];
+      this.listasPrecios.set(listas);
+      const listaDefault = this.seleccionarListaPorDefecto(listas);
+      if (listaDefault) {
+        this.seleccionarListaPrecio(listaDefault.id, false);
+      }
     });
+  }
+
+  onListaPrecioChange(valor: string | number | null): void {
+    const id = valor ? Number(valor) : null;
+    if (!id) {
+      this.listaPrecioSeleccionadaId.set(null);
+      this.detallesPrecio.set([]);
+      return;
+    }
+    this.seleccionarListaPrecio(id, true);
+  }
+
+  onArticuloChange(index: number): void {
+    const g = this.detallesArray.at(index);
+    if (!g) return;
+    this.aplicarPrecioALinea(g);
+  }
+
+  onCantidadChange(index: number): void {
+    const g = this.detallesArray.at(index);
+    if (!g) return;
+    this.aplicarPrecioALinea(g);
+  }
+
+  onFechaVentaChange(): void {
+    this.recalcularPreciosLineas();
+  }
+
+  private seleccionarListaPorDefecto(listas: ListaPrecio[]): ListaPrecio | null {
+    if (listas.length === 0) return null;
+    const hoy = this.hoyISO();
+    const vigentes = listas.filter(
+      (l) =>
+        (!l.vigencia_desde || hoy >= l.vigencia_desde.slice(0, 10)) &&
+        (!l.vigencia_hasta || hoy <= l.vigencia_hasta.slice(0, 10)),
+    );
+    const pool = vigentes.length > 0 ? vigentes : listas;
+    return pool.find((l) => l.tipo_lista === 'GENERAL') ?? pool[0] ?? null;
+  }
+
+  private seleccionarListaPrecio(listaId: number, recalcularLineas: boolean): void {
+    this.listaPrecioSeleccionadaId.set(listaId);
+    this.preciosSvc
+      .listarDetalles(listaId, { page: 1, page_size: 100 })
+      .pipe(catchError(() => of({ data: [] as DetallePrecio[], page: 1, page_size: 100, total: 0 })))
+      .subscribe((res) => {
+        this.detallesPrecio.set(res.data ?? []);
+        if (recalcularLineas) {
+          this.recalcularPreciosLineas();
+        }
+      });
+  }
+
+  private recalcularPreciosLineas(): void {
+    for (const g of this.detallesArray.controls) {
+      this.aplicarPrecioALinea(g);
+    }
+  }
+
+  private aplicarPrecioALinea(g: FormGroup): void {
+    const artIdRaw = g.get('articulo_id')?.value;
+    if (!artIdRaw) return;
+    const precio = this.resolverPrecioArticulo(
+      Number(artIdRaw),
+      Number(g.get('cantidad')?.value ?? 1),
+    );
+    if (precio !== null) {
+      g.get('precio_unitario')?.setValue(precio);
+    }
+  }
+
+  private resolverPrecioArticulo(articuloId: number, cantidad: number): number | null {
+    const candidatos = this.detallesPrecio().filter((d) => d.articulo_id === articuloId);
+    if (candidatos.length === 0) return null;
+
+    const fechaVenta = (this.form.controls.fecha_venta.value || this.hoyISO()).slice(0, 10);
+    const vigentes = candidatos.filter(
+      (d) =>
+        (!d.vigencia_desde || fechaVenta >= d.vigencia_desde.slice(0, 10)) &&
+        (!d.vigencia_hasta || fechaVenta <= d.vigencia_hasta.slice(0, 10)),
+    );
+    const pool = vigentes.length > 0 ? vigentes : candidatos;
+
+    const cant = cantidad > 0 ? cantidad : 1;
+    const aplicables = pool.filter((d) => cant >= Number(d.cantidad_minima ?? 0));
+    if (aplicables.length > 0) {
+      aplicables.sort((a, b) => Number(b.cantidad_minima ?? 0) - Number(a.cantidad_minima ?? 0));
+      return Number(aplicables[0].precio);
+    }
+
+    const ordenados = [...pool].sort(
+      (a, b) => Number(a.cantidad_minima ?? 0) - Number(b.cantidad_minima ?? 0),
+    );
+    return Number(ordenados[0].precio);
   }
 
   cargarVentas(): void {
@@ -215,6 +348,9 @@ export class VentasComponent implements OnInit {
   abrirNuevaVenta(): void {
     this.editando.set(null);
     this.modalError.set(null);
+    this.cuentaLealtadCliente.set(null);
+    this.redimirActivo.set(false);
+    this.puntosRedimir.set(0);
     this.detallesArray.clear();
 
     const cf = this.consumidorFinal();
@@ -231,6 +367,80 @@ export class VentasComponent implements OnInit {
 
     this.agregarLinea();
     this.modalAbierto.set(true);
+    if (cf?.id && this.empresaAdheridaLealtad()) {
+      this.cargarCuentaLealtadCliente(cf.id);
+    }
+  }
+
+  esClienteConsumidorFinal(): boolean {
+    const cliId = this.form.controls.cliente_id.value;
+    if (!cliId) return false;
+    const cli = this.clientes().find((c) => c.id === Number(cliId));
+    return cli?.numero_identificacion === CONSUMIDOR_FINAL_DOC;
+  }
+
+  onClienteChange(): void {
+    this.redimirActivo.set(false);
+    this.puntosRedimir.set(0);
+    const cliId = this.form.controls.cliente_id.value;
+    if (!cliId || this.editando() || !this.empresaAdheridaLealtad()) {
+      this.cuentaLealtadCliente.set(null);
+      return;
+    }
+    this.cargarCuentaLealtadCliente(Number(cliId));
+  }
+
+  onToggleRedimir(checked: boolean): void {
+    this.redimirActivo.set(checked);
+    if (!checked) {
+      this.puntosRedimir.set(0);
+    } else if (this.puntosRedimir() <= 0) {
+      this.puntosRedimir.set(this.maxPuntosRedimibles());
+    }
+  }
+
+  onPuntosRedimirChange(valor: string): void {
+    const num = Math.max(0, Math.floor(Number(valor) || 0));
+    const maxPts = this.maxPuntosRedimibles();
+    this.puntosRedimir.set(Math.min(num, maxPts));
+  }
+
+  usarMaximosPuntos(): void {
+    this.redimirActivo.set(true);
+    this.puntosRedimir.set(this.maxPuntosRedimibles());
+  }
+
+  maxPuntosRedimibles(): number {
+    const cuenta = this.cuentaLealtadCliente();
+    if (!cuenta || !cuenta.tiene_cuenta || !cuenta.permite_redimir || cuenta.saldo_puntos <= 0) {
+      return 0;
+    }
+    const valorPunto = cuenta.valor_punto_redencion || 1;
+    const totalBruto = this.calcularSubtotal() + this.calcularIVA();
+    const maxPorTotal = Math.floor(totalBruto / valorPunto);
+    return Math.max(0, Math.min(cuenta.saldo_puntos, maxPorTotal));
+  }
+
+  calcularDescuentoLealtad(): number {
+    if (this.editando()) return Number(this.editando()?.descuento_lealtad ?? 0);
+    if (!this.redimirActivo()) return 0;
+    const cuenta = this.cuentaLealtadCliente();
+    const pts = this.puntosRedimir();
+    if (!cuenta || !cuenta.tiene_cuenta || pts <= 0) return 0;
+    const desc = Math.round(pts * (cuenta.valor_punto_redencion || 1) * 100) / 100;
+    const totalBruto = this.calcularSubtotal() + this.calcularIVA();
+    return Math.min(desc, totalBruto);
+  }
+
+  private cargarCuentaLealtadCliente(terceroId: number): void {
+    this.cargandoCuentaLealtad.set(true);
+    this.lealtadSvc
+      .consultarCuentaCliente(terceroId)
+      .pipe(catchError(() => of(null)))
+      .subscribe((res) => {
+        this.cargandoCuentaLealtad.set(false);
+        this.cuentaLealtadCliente.set(res?.tiene_cuenta ? res : null);
+      });
   }
 
   abrirEditarVenta(v: Venta): void {
@@ -320,7 +530,7 @@ export class VentasComponent implements OnInit {
   }
 
   calcularTotal(): number {
-    return this.calcularSubtotal() + this.calcularIVA();
+    return Math.max(0, this.calcularSubtotal() + this.calcularIVA() - this.calcularDescuentoLealtad());
   }
 
   guardarVenta(): void {
@@ -360,6 +570,7 @@ export class VentasComponent implements OnInit {
           fecha_venta: v.fecha_venta ?? this.hoyISO(),
           fecha_vencimiento: v.fecha_vencimiento?.trim() || null,
           observaciones: (v.observaciones ?? '').trim() || null,
+          puntos_redimir: this.redimirActivo() && this.puntosRedimir() > 0 ? this.puntosRedimir() : null,
           detalles,
         } as CrearVentaRequest);
 

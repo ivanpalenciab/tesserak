@@ -31,6 +31,8 @@ export interface Venta {
   fecha_vencimiento: string | null;
   subtotal: number;
   total_iva: number;
+  puntos_redimidos?: number;
+  descuento_lealtad?: number;
   total: number;
   observaciones: string | null;
   usuario_id: number;
@@ -62,6 +64,7 @@ export interface CrearVentaRequest {
   fecha_venta: string;
   fecha_vencimiento?: string | null;
   observaciones?: string | null;
+  puntos_redimir?: number | null;
   detalles: VentaDetalleInput[];
 }
 
