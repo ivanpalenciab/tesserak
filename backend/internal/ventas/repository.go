@@ -174,6 +174,9 @@ func (r *Repository) List(ctx context.Context, empresaID int32, f ListarVentasQu
 	if f.SucursalID > 0 {
 		q = q.Where("ven_ventas.sucursal_id = ?", f.SucursalID)
 	}
+	if len(f.SucursalIDsScope) > 0 {
+		q = q.Where("ven_ventas.sucursal_id IN ?", f.SucursalIDsScope)
+	}
 	if f.UbicacionID > 0 {
 		q = q.Where("ven_ventas.ubicacion_id = ?", f.UbicacionID)
 	}

@@ -7,12 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"tesserak/backend/internal/auth"
 	"tesserak/backend/internal/httpx"
 )
 
 type Handler struct {
-	svc            *Service
-	authMiddleware gin.HandlerFunc
+	svc                    *Service
+	authMiddleware         gin.HandlerFunc
+	optionalAuthMiddleware gin.HandlerFunc
 }
 
 func NewHandler(svc *Service) *Handler {
@@ -24,9 +26,17 @@ func (h *Handler) WithAuthMiddleware(mw gin.HandlerFunc) *Handler {
 	return h
 }
 
+func (h *Handler) WithOptionalAuthMiddleware(mw gin.HandlerFunc) *Handler {
+	h.optionalAuthMiddleware = mw
+	return h
+}
+
 // RegisterRoutes registra las rutas del módulo CRM bajo /crm.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	g := rg.Group("/crm")
+	if h.optionalAuthMiddleware != nil {
+		g.Use(h.optionalAuthMiddleware)
+	}
 
 	// Control / Dashboard
 	g.GET("/resumen", h.resumen)
@@ -348,6 +358,10 @@ func (h *Handler) crearLead(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	if claims, ok := auth.ClaimsFromContext(c); ok && req.SucursalID != nil && !claims.HasSucursal(*req.SucursalID) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+		return
+	}
 	resp, err := h.svc.CrearLead(c.Request.Context(), req)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -361,6 +375,9 @@ func (h *Handler) listarLeads(c *gin.Context) {
 	if err := c.ShouldBindQuery(&q); err != nil {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
+	}
+	if claims, ok := auth.ClaimsFromContext(c); ok {
+		q.SucursalIDsScope = claims.AllowedSucursalIDs()
 	}
 	resp, err := h.svc.ListarLeads(c.Request.Context(), q)
 	if err != nil {
@@ -379,6 +396,10 @@ func (h *Handler) obtenerLead(c *gin.Context) {
 	resp, err := h.svc.ObtenerLead(c.Request.Context(), id)
 	if err != nil {
 		httpx.RespondError(c, err)
+		return
+	}
+	if claims, ok := auth.ClaimsFromContext(c); ok && resp.SucursalID != nil && !claims.HasSucursal(*resp.SucursalID) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
 		return
 	}
 	c.JSON(http.StatusOK, resp)

@@ -45,8 +45,9 @@ type ActualizarCompraRequest struct {
 }
 
 type ListarComprasQuery struct {
-	SucursalID int32  `form:"sucursal_id" binding:"omitempty,gt=0"`
-	Estado     string `form:"estado"      binding:"omitempty,oneof=BORRADOR REGISTRADA PAGADA ANULADA"`
+	SucursalID       int32   `form:"sucursal_id" binding:"omitempty,gt=0"`
+	SucursalIDsScope []int32 `form:"-"`
+	Estado           string  `form:"estado"      binding:"omitempty,oneof=BORRADOR REGISTRADA PAGADA ANULADA"`
 	MonedaID   int32  `form:"moneda_id"   binding:"omitempty,gt=0"`
 	FechaDesde string `form:"fecha_desde"`
 	FechaHasta string `form:"fecha_hasta"`

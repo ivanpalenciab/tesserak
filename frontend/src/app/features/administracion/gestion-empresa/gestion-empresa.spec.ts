@@ -15,6 +15,7 @@ describe('GestionEmpresaComponent', () => {
     sessionStorage.clear();
 
     const authStub = {
+      esAdministrador: signal(true),
       usuario: signal({
         id: 5,
         empresa_id: 1,
@@ -100,6 +101,20 @@ describe('GestionEmpresaComponent', () => {
       data: [
         { id: 1, nombre: 'Sede Principal', activo: true },
         { id: 2, nombre: 'Sucursal Norte', activo: true },
+      ],
+    });
+    httpMock.expectOne(`${environment.apiUrl}/empresas/sucursales`).flush({
+      data: [
+        {
+          id: 1,
+          empresa_id: 1,
+          ciudad_id: null,
+          nombre: 'Sede Principal',
+          direccion: 'Calle 100',
+          activo: true,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
       ],
     });
 

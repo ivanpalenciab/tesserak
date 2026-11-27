@@ -1,1 +1,10 @@
+# Variables de entorno
 .env
+.env.*
+!.env.example
+
+# Secretos y configuraciones locales
+secrets/
+
+/Api
+/MCP

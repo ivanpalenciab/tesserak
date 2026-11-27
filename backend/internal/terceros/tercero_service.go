@@ -21,9 +21,10 @@ var (
 	ErrIdentificacionDuplicada = httpx.NewError(http.StatusConflict, "identificacion_duplicada", "ya existe un tercero activo con ese tipo y número de identificación en la empresa")
 	ErrReferenciaInvalida      = httpx.NewError(http.StatusUnprocessableEntity, "referencia_invalida", "el país o rol indicado no es válido")
 	ErrRolesInvalidos          = httpx.NewError(http.StatusUnprocessableEntity, "roles_invalidos", "uno o más roles seleccionados no existen o están inactivos")
+	ErrSoloRolCliente          = httpx.NewError(http.StatusForbidden, "solo_rol_cliente", "el rol Gestor de ventas únicamente puede crear clientes o asignar el rol CLIENTE a terceros existentes")
 )
 
-func (s *Service) CrearTercero(ctx context.Context, empresaID int32, req CrearTerceroRequest) (*TerceroResponse, error) {
+func (s *Service) CrearTercero(ctx context.Context, empresaID int32, req CrearTerceroRequest, soloCliente bool) (*TerceroResponse, error) {
 	rolIDs := deduplicateInt32(req.RolIDs)
 	activo := true
 	if req.Activo != nil {
@@ -38,6 +39,15 @@ func (s *Service) CrearTercero(ctx context.Context, empresaID int32, req CrearTe
 		}
 		if !ok {
 			return ErrRolesInvalidos
+		}
+		if soloCliente {
+			clienteRolID, err := tx.FindRolIDByCodigo(ctx, "CLIENTE")
+			if err != nil {
+				return err
+			}
+			if len(rolIDs) != 1 || rolIDs[0] != clienteRolID {
+				return ErrSoloRolCliente
+			}
 		}
 
 		t := &TerceroMaestro{
@@ -106,10 +116,11 @@ func (s *Service) ListarTerceros(ctx context.Context, empresaID int32, q ListarT
 	}, nil
 }
 
-func (s *Service) ActualizarTercero(ctx context.Context, empresaID int32, id int64, req ActualizarTerceroRequest) (*TerceroResponse, error) {
+func (s *Service) ActualizarTercero(ctx context.Context, empresaID int32, id int64, req ActualizarTerceroRequest, soloCliente bool) (*TerceroResponse, error) {
 	var actualizado *TerceroMaestro
 	err := s.repo.WithTx(ctx, func(tx *Repository) error {
-		if _, err := tx.FindTerceroByID(ctx, empresaID, id); err != nil {
+		existente, err := tx.FindTerceroByID(ctx, empresaID, id)
+		if err != nil {
 			return err
 		}
 
@@ -157,12 +168,39 @@ func (s *Service) ActualizarTercero(ctx context.Context, empresaID int32, id int
 			if !ok {
 				return ErrRolesInvalidos
 			}
+			if soloCliente {
+				clienteRolID, err := tx.FindRolIDByCodigo(ctx, "CLIENTE")
+				if err != nil {
+					return err
+				}
+				// El Gestor de ventas solo puede agregar/conservar el rol CLIENTE;
+				// no puede agregar ni quitar otros roles (ej. PROVEEDOR, EMPLEADO).
+				actualesNoCliente := make(map[int32]struct{})
+				for _, r := range existente.Roles {
+					if r.RolID != clienteRolID {
+						actualesNoCliente[r.RolID] = struct{}{}
+					}
+				}
+				nuevosNoCliente := make(map[int32]struct{})
+				for _, rid := range rolIDs {
+					if rid != clienteRolID {
+						nuevosNoCliente[rid] = struct{}{}
+					}
+				}
+				if len(actualesNoCliente) != len(nuevosNoCliente) {
+					return ErrSoloRolCliente
+				}
+				for rid := range actualesNoCliente {
+					if _, ok := nuevosNoCliente[rid]; !ok {
+						return ErrSoloRolCliente
+					}
+				}
+			}
 			if err := tx.ReplaceTerceroRoles(ctx, id, rolIDs); err != nil {
 				return err
 			}
 		}
 
-		var err error
 		actualizado, err = tx.FindTerceroByID(ctx, empresaID, id)
 		return err
 	})

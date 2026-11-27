@@ -27,12 +27,14 @@ func makeToken(t *testing.T, empresaID int32) string {
 	t.Helper()
 	now := time.Now().UTC()
 	tok, err := auth.SignHS256(auth.Claims{
-		Sub:        1,
-		EmpresaID:  empresaID,
-		SucursalID: 1,
-		Email:      "test@tesserak.local",
-		Iat:        now.Unix(),
-		Exp:        now.Add(time.Hour).Unix(),
+		Sub:             1,
+		EmpresaID:       empresaID,
+		SucursalID:      1,
+		Roles:           []string{auth.RolAdministrador},
+		EsAdministrador: true,
+		Email:           "test@tesserak.local",
+		Iat:             now.Unix(),
+		Exp:             now.Add(time.Hour).Unix(),
 	}, testSecret)
 	if err != nil {
 		t.Fatalf("error firmando token: %v", err)

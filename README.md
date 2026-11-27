@@ -69,7 +69,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   ├── docker-compose.yml                 # PostgreSQL 17 aislado para desarrollo local
 │   ├── .env.example                       # Plantilla de variables de entorno
 │   ├── go.mod / go.sum
-│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000019, up/down)
+│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000020, up/down)
 │   │   ├── embed.go                       # //go:embed *.sql
 │   │   ├── 000001_init_usuarios.*         # paises, ciudades, empresas, sucursales, usuarios
 │   │   ├── 000002_init_crm.*              # monedas, orígenes, estados, motivos, leads, actividades, intereses
@@ -89,7 +89,8 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   │   ├── 000016_init_secuencias_documento.*      # tipos_documento y secuencias_documento (consecutivos automáticos)
 │   │   ├── 000017_init_inventario.*                # inv_ubicaciones, inv_tipos_movimiento, inv_documentos, inv_movimientos_detalle, inv_stock
 │   │   ├── 000018_backfill_compras_a_inventario.*  # Migración de compras históricas hacia inv_documentos / inv_stock
-│   │   └── 000019_init_ventas.*                    # ven_ventas, ven_ventas_detalle y backfill Consumidor Final (222222222222)
+│   │   ├── 000019_init_ventas.*                    # ven_ventas, ven_ventas_detalle y backfill Consumidor Final (222222222222)
+│   │   └── 000020_usuario_sucursales.*             # Tabla intermedia usuario_sucursales (N:M) y eliminación de usuarios.sucursal_id
 │   └── internal/
 │       ├── auth/                          # Login, bcrypt, JWT HS256 y middleware RequireAuth
 │       ├── config/                        # Carga de .env y variables de entorno
@@ -97,7 +98,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │       ├── database/                      # Conexión GORM y runner de golang-migrate
 │       ├── httpx/                         # AppError uniforme y formateo de errores de validación
 │       ├── empresas/                      # CRUD de empresas (soft delete) + creación automática de Consumidor Final
-│       ├── usuarios/                      # CRUD de usuarios (1 sucursal, bcrypt, regeneración de key UUID, soft delete)
+│       ├── usuarios/                      # CRUD de usuarios (N:M sucursales vía usuario_sucursales, bcrypt, key UUID, soft delete)
 │       ├── productos/                     # Artículos (productos físicos y servicios), categorías, marcas, impuestos y catálogos
 │       ├── precios/                       # Listas de precios y detalle por artículo
 │       ├── terceros/                      # Terceros por empresa, asignación de roles globales y Consumidor Final
@@ -202,6 +203,13 @@ Las migraciones están en `backend/migrations/`, se embeben en el binario median
 | `000017` | Módulo de inventarios (`inv_`) | `inv_ubicaciones`, `inv_tipos_movimiento` (9 tipos semilla), `inv_documentos`, `inv_movimientos_detalle`, `inv_stock` (stock materializado + costo promedio) |
 | `000018` | Backfill de compras a inventario | Genera movimientos `ENTRADA_COMPRA` e inicializa `inv_stock` para compras históricas existentes |
 | `000019` | Módulo de ventas y Consumidor Final | `ven_ventas`, `ven_ventas_detalle` (soft delete) y backfill de `Consumidor Final` (`CC 222222222222`, rol `CLIENTE`) por empresa |
+| `000020` | Relación N:M usuarios ↔ sucursales | Crea tabla intermedia `usuario_sucursales` (con FKs compuestas y `es_principal`), migra `usuarios.sucursal_id` y elimina la FK y columna `sucursal_id` de `usuarios` |
+| `000021` | Roles de sistema y rol Administrador | `roles_sistema` (semilla `ADMINISTRADOR` y `USUARIO`), `usuario_roles` (N:M) y backfill de `ADMINISTRADOR` al primer usuario de cada empresa |
+| `000022` | Rol Administrador de sucursal | Inserta rol de sistema `ADMINISTRADOR_SUCURSAL` con acceso administrativo acotado a sus sucursales asignadas |
+| `000023` | Rol Gestor de ventas | Inserta rol de sistema `GESTOR_VENTAS` (solo crear/modificar ventas y crear/asignar rol `CLIENTE` en terceros) |
+| `000024` | Rol Asesor comercial | Inserta rol de sistema `ASESOR_COMERCIAL` en `roles_sistema` |
+| `000025` | Asesor comercial solo CRM + multi-rol | Actualiza `ASESOR_COMERCIAL` a acceso exclusivo de CRM, combinable con múltiples roles (ej. `GESTOR_VENTAS`) |
+| `000026` | Rol Gestor de compras | Inserta rol de sistema `GESTOR_COMPRAS` (consultar, crear y modificar compras, combinable con otros roles) |
 
 El diagrama relacional completo y actualizado está en [tesserak_modelo_corregido.drawio](tesserak_modelo_corregido.drawio) (editable en [diagrams.net](https://app.diagrams.net/)) y la documentación detallada de convenciones de BD en [documentacion base de datos.md](documentacion%20base%20de%20datos.md).
 
@@ -213,11 +221,12 @@ Base URL local: `http://localhost:8080`
 
 ### Salud y Autenticación
 - `GET /health` — Verifica conectividad con PostgreSQL.
-- `POST /api/v1/auth/login` — Autenticación por email o usuario + password (+ `identificador_fiscal` opcional). Retorna JWT HS256 y datos del usuario.
+- `POST /api/v1/auth/login` — Autenticación por email o usuario + password (+ `identificador_fiscal` opcional). Retorna JWT HS256 y datos del usuario (incluyendo `sucursal_ids` asignadas y `sucursal_id` principal).
 
 ### Empresas (`/api/v1/empresas`) y Usuarios (`/api/v1/usuarios`)
 - `POST`, `GET` (filtros + paginación), `GET /:id`, `PATCH /:id`, `DELETE /:id` (soft delete).
 - Al crear una empresa (`POST /api/v1/empresas`) se crea automáticamente el tercero por defecto **Consumidor Final** (`222222222222`, rol único `CLIENTE`).
+- En usuarios, `POST` y `PATCH` aceptan múltiples sucursales mediante `sucursal_ids` (manteniendo `sucursal_id` por retrocompatibilidad) almacenadas en `usuario_sucursales`; todas las sucursales deben pertenecer a la misma empresa.
 - `POST /api/v1/usuarios/:id/regenerar-key` — Regenera la `key` (UUID v4) del usuario.
 
 ### CRM — Núcleo y Catálogos (`/api/v1/crm`)
@@ -314,7 +323,8 @@ Base URL local: `http://localhost:8080`
 | `/compras` | Implementado | Registro de compras con proveedores filtrados, consecutivo automático, entrada a inventario y soft delete |
 | `/inventario` | Implementado | Vista por ubicaciones → detalle de stock (`inv_stock`), ajustes, pérdidas, averías, devoluciones y traslados internos |
 | `/ventas` | Implementado | Registro de ventas con Consumidor Final por defecto, cálculo automático de IVA, salida atómica de stock y soft delete |
-| `/gestion-empresa` | Implementado | Administración de prefijos de consecutivos, ubicaciones/bodegas por sucursal (CRUD + soft delete) y key UUID de usuario |
+| `/gestion-empresa` | Implementado | Administración de prefijos de consecutivos, ubicaciones/bodegas por sucursal y key UUID de usuario (**exclusivo `ADMINISTRADOR`**) |
+| `/usuarios` | Implementado | Administración de usuarios por empresa: creación/edición (solo `ADMINISTRADOR`), asignación de rol de sistema y selección de sucursales específicas para no administradores |
 
 ---
 

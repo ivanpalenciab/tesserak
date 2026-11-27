@@ -18,7 +18,7 @@ backend/
 │   ├── precios/                 # módulo listas de precios: listas_precios y lista_precios_detalle
 │   ├── productos/               # módulo artículos: productos, servicios y catálogos (marcas, impuestos, categorías)
 │   ├── terceros/                # módulo terceros: tercero_maestro, roles_tercero globales y tercero_empresa_roles
-│   ├── usuarios/                # módulo usuarios: CRUD, key UUID v4 y regeneración
+│   ├── usuarios/                # módulo usuarios: CRUD, múltiples sucursales (usuario_sucursales), key UUID v4 y regeneración
 │   └── ventas/                  # módulo ventas: ven_ventas, ven_ventas_detalle, IVA automático y salida atómica de stock
 ├── migrations/                  # SQL versionado (golang-migrate), embebido en el binario
 └── docker-compose.yml           # PostgreSQL local
@@ -80,17 +80,17 @@ curl -X POST http://localhost:8080/api/v1/empresas -H "Content-Type: application
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/v1/usuarios` | Crear usuario (la empresa se deduce de la sucursal) |
-| GET | `/api/v1/usuarios` | Listar. Filtros: `empresa_id`, `sucursal_id`, `activo`, `q`, `page`, `page_size` |
+| POST | `/api/v1/usuarios` | Crear usuario (la empresa se deduce de las sucursales asignadas en `sucursal_ids` o `sucursal_id`) |
+| GET | `/api/v1/usuarios` | Listar. Filtros: `empresa_id`, `sucursal_id` (vía `usuario_sucursales`), `activo`, `q`, `page`, `page_size` |
 | GET | `/api/v1/usuarios/:id` | Obtener por id |
-| PATCH | `/api/v1/usuarios/:id` | Actualización parcial (solo campos enviados) |
+| PATCH | `/api/v1/usuarios/:id` | Actualización parcial (solo campos enviados; permite reemplazar `sucursal_ids`) |
 | DELETE | `/api/v1/usuarios/:id` | **Soft delete** (`deleted_at = now()`), responde 204 |
 
 Ejemplo:
 
 ```powershell
 curl -X POST http://localhost:8080/api/v1/usuarios -H "Content-Type: application/json" -d '{
-  "sucursal_id": 1,
+  "sucursal_ids": [1, 2],
   "nombre_usuario": "jperez",
   "nombres": "Juan",
   "apellidos": "Pérez",
@@ -100,11 +100,12 @@ curl -X POST http://localhost:8080/api/v1/usuarios -H "Content-Type: application
 ```
 
 ### Reglas de negocio
-- Cada usuario pertenece a **una sucursal**; `empresa_id` se guarda desnormalizado y una FK compuesta `(sucursal_id, empresa_id)` garantiza la consistencia.
+- Un usuario pertenece a una `empresa` (`usuarios.empresa_id`) y puede tener acceso a **una o varias sucursales** de esa misma empresa mediante la tabla intermedia `usuario_sucursales` (la primera sucursal de `sucursal_ids` se marca como `es_principal = TRUE`). Se sigue aceptando `sucursal_id` por retrocompatibilidad.
+- Las FKs compuestas `(usuario_id, empresa_id)` y `(sucursal_id, empresa_id)` en `usuario_sucursales` garantizan a nivel de PostgreSQL que no se puedan mezclar sucursales de distintas empresas.
 - **Email único por empresa** (sin distinguir mayúsculas) entre usuarios no eliminados → `409 email_duplicado`.
 - **Nombre de usuario único por empresa** → `409 nombre_usuario_duplicado`.
 - Un usuario eliminado libera su email/nombre de usuario para volver a usarse.
-- No se puede mover un usuario a una sucursal de otra empresa → `422 sucursal_otra_empresa`.
+- No se pueden asignar sucursales de otra empresa → `422 sucursal_otra_empresa`.
 - Contraseñas con bcrypt; `password_hash` nunca se expone en la API.
 - Los usuarios eliminados no aparecen en listados ni consultas (GORM filtra `deleted_at IS NULL`).
 

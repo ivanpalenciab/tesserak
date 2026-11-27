@@ -70,12 +70,13 @@ type TipoMovimientoResponse struct {
 // =====================================================================
 
 type ListarStockQuery struct {
-	UbicacionID  int32  `form:"ubicacion_id"   binding:"omitempty,gt=0"`
-	ArticuloID   int32  `form:"articulo_id"    binding:"omitempty,gt=0"`
-	SoloConStock *bool  `form:"solo_con_stock"`
-	Q            string `form:"q"              binding:"omitempty,max=100"`
-	Page         int    `form:"page"           binding:"omitempty,gte=1"`
-	PageSize     int    `form:"page_size"      binding:"omitempty,gte=1,lte=100"`
+	UbicacionID      int32   `form:"ubicacion_id"   binding:"omitempty,gt=0"`
+	ArticuloID       int32   `form:"articulo_id"    binding:"omitempty,gt=0"`
+	SucursalIDsScope []int32 `form:"-"`
+	SoloConStock     *bool   `form:"solo_con_stock"`
+	Q                string  `form:"q"              binding:"omitempty,max=100"`
+	Page             int     `form:"page"           binding:"omitempty,gte=1"`
+	PageSize         int     `form:"page_size"      binding:"omitempty,gte=1,lte=100"`
 }
 
 type StockItemResponse struct {
@@ -125,14 +126,15 @@ type CrearMovimientoRequest struct {
 }
 
 type ListarMovimientosQuery struct {
-	TipoMovimientoID int32  `form:"tipo_movimiento_id" binding:"omitempty,gt=0"`
-	UbicacionID      int32  `form:"ubicacion_id"       binding:"omitempty,gt=0"`
-	ArticuloID       int32  `form:"articulo_id"        binding:"omitempty,gt=0"`
-	FechaDesde       string `form:"fecha_desde"`
-	FechaHasta       string `form:"fecha_hasta"`
-	Q                string `form:"q"                  binding:"omitempty,max=100"`
-	Page             int    `form:"page"               binding:"omitempty,gte=1"`
-	PageSize         int    `form:"page_size"          binding:"omitempty,gte=1,lte=100"`
+	TipoMovimientoID int32   `form:"tipo_movimiento_id" binding:"omitempty,gt=0"`
+	UbicacionID      int32   `form:"ubicacion_id"       binding:"omitempty,gt=0"`
+	ArticuloID       int32   `form:"articulo_id"        binding:"omitempty,gt=0"`
+	SucursalIDsScope []int32 `form:"-"`
+	FechaDesde       string  `form:"fecha_desde"`
+	FechaHasta       string  `form:"fecha_hasta"`
+	Q                string  `form:"q"                  binding:"omitempty,max=100"`
+	Page             int     `form:"page"               binding:"omitempty,gte=1"`
+	PageSize         int     `form:"page_size"          binding:"omitempty,gte=1,lte=100"`
 }
 
 type MovimientoDetalleResponse struct {

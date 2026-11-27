@@ -21,10 +21,11 @@ func NewHandler(svc *Service, authMiddleware gin.HandlerFunc) *Handler {
 }
 
 // RegisterRoutes registra las rutas de tipos de documento y secuencias bajo /consecutivos.
+// Al pertenecer al módulo de Gestión de Empresa, solo los usuarios ADMINISTRADOR pueden acceder.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	g := rg.Group("/consecutivos")
 	if h.authMiddleware != nil {
-		g.Use(h.authMiddleware)
+		g.Use(h.authMiddleware, auth.RequireAdmin())
 	}
 
 	tipos := g.Group("/tipos-documento")

@@ -12,6 +12,7 @@ import {
   EmpresaDetalle,
   FrecuenciaReinicio,
   SecuenciaDocumento,
+  SucursalDetalle,
   TipoDocumentoConsecutivo,
   UsuarioKeyDetalle,
 } from '../gestion-empresa.models';
@@ -42,6 +43,7 @@ export class GestionEmpresaComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
+  readonly esAdministrador = this.auth.esAdministrador;
   readonly frecuencias = FRECUENCIAS_REINICIO;
 
   readonly loading = signal(true);
@@ -53,6 +55,20 @@ export class GestionEmpresaComponent implements OnInit {
   readonly secuenciasItems = signal<SecuenciaItemForm[]>([]);
   readonly ubicaciones = signal<Ubicacion[]>([]);
   readonly sucursales = signal<SucursalOption[]>([]);
+  readonly sucursalesEmpresa = signal<SucursalDetalle[]>([]);
+
+  // Controles de sucursales (crear, editar, activar/desactivar, soft delete)
+  readonly modalSucAbierto = signal(false);
+  readonly savingSuc = signal(false);
+  readonly modalSucError = signal<string | null>(null);
+  readonly editandoSuc = signal<SucursalDetalle | null>(null);
+  readonly sucAEliminar = signal<SucursalDetalle | null>(null);
+
+  readonly formSuc = this.fb.group({
+    nombre: ['', [Validators.required, Validators.maxLength(150)]],
+    direccion: ['', [Validators.maxLength(255)]],
+    activo: [true],
+  });
 
   // Controles de ubicaciones (crear, editar, activar/desactivar, soft delete)
   readonly modalUbicAbierto = signal(false);
@@ -106,12 +122,24 @@ export class GestionEmpresaComponent implements OnInit {
       sucursales: this.invSvc
         .listarSucursales()
         .pipe(catchError(() => of([] as SucursalOption[]))),
+      sucursalesEmpresa: this.esAdministrador()
+        ? this.svc.listarSucursales().pipe(catchError(() => of([] as SucursalDetalle[])))
+        : of([] as SucursalDetalle[]),
     }).subscribe({
-      next: ({ empresa, usuario, tipos, secuencias, ubicaciones, sucursales }) => {
+      next: ({
+        empresa,
+        usuario,
+        tipos,
+        secuencias,
+        ubicaciones,
+        sucursales,
+        sucursalesEmpresa,
+      }) => {
         this.empresa.set(empresa);
         this.usuarioDetalle.set(usuario);
         this.ubicaciones.set(ubicaciones);
         this.sucursales.set(sucursales);
+        this.sucursalesEmpresa.set(sucursalesEmpresa);
 
         const secPorTipo = new Map(secuencias.map((s) => [s.tipo_documento_id, s]));
         const items: SecuenciaItemForm[] = tipos
@@ -386,6 +414,135 @@ export class GestionEmpresaComponent implements OnInit {
         );
       },
     });
+  }
+
+  // =====================================================================
+  // Sucursales (Crear, Editar, Activar/Desactivar, Soft Delete)
+  // =====================================================================
+
+  abrirNuevaSucursal(): void {
+    if (!this.esAdministrador()) return;
+    this.editandoSuc.set(null);
+    this.modalSucError.set(null);
+    this.formSuc.reset({ nombre: '', direccion: '', activo: true });
+    this.modalSucAbierto.set(true);
+  }
+
+  abrirEditarSucursal(s: SucursalDetalle): void {
+    if (!this.esAdministrador()) return;
+    this.editandoSuc.set(s);
+    this.modalSucError.set(null);
+    this.formSuc.reset({
+      nombre: s.nombre,
+      direccion: s.direccion ?? '',
+      activo: s.activo,
+    });
+    this.modalSucAbierto.set(true);
+  }
+
+  cerrarModalSucursal(): void {
+    if (this.savingSuc()) return;
+    this.modalSucAbierto.set(false);
+    this.editandoSuc.set(null);
+    this.modalSucError.set(null);
+  }
+
+  guardarSucursal(): void {
+    if (!this.esAdministrador()) return;
+    if (this.formSuc.invalid) {
+      this.formSuc.markAllAsTouched();
+      return;
+    }
+
+    const v = this.formSuc.getRawValue();
+    const payload = {
+      nombre: (v.nombre ?? '').trim(),
+      direccion: (v.direccion ?? '').trim() || null,
+      activo: Boolean(v.activo),
+    };
+
+    this.savingSuc.set(true);
+    this.modalSucError.set(null);
+    const actual = this.editandoSuc();
+
+    const obs = actual
+      ? this.svc.actualizarSucursal(actual.id, payload)
+      : this.svc.crearSucursal(payload);
+
+    obs.subscribe({
+      next: () => {
+        this.savingSuc.set(false);
+        this.modalSucAbierto.set(false);
+        this.editandoSuc.set(null);
+        this.mostrarExito(
+          actual ? 'Sucursal actualizada correctamente.' : 'Sucursal creada correctamente.',
+        );
+        this.refrescarSucursales();
+      },
+      error: (err) => {
+        this.savingSuc.set(false);
+        this.modalSucError.set(
+          this.extraerMensajeError(err, 'No se pudo guardar la sucursal.'),
+        );
+      },
+    });
+  }
+
+  toggleActivoSucursal(s: SucursalDetalle): void {
+    if (!this.esAdministrador()) return;
+    this.errorMensaje.set(null);
+    this.svc.actualizarSucursal(s.id, { activo: !s.activo }).subscribe({
+      next: () => {
+        this.mostrarExito(
+          s.activo ? `Sucursal "${s.nombre}" desactivada.` : `Sucursal "${s.nombre}" activada.`,
+        );
+        this.refrescarSucursales();
+      },
+      error: (err) => {
+        this.errorMensaje.set(
+          this.extraerMensajeError(err, 'No se pudo actualizar el estado de la sucursal.'),
+        );
+      },
+    });
+  }
+
+  solicitarEliminarSucursal(s: SucursalDetalle): void {
+    if (!this.esAdministrador()) return;
+    this.sucAEliminar.set(s);
+  }
+
+  cancelarEliminarSucursal(): void {
+    if (this.savingSuc()) return;
+    this.sucAEliminar.set(null);
+  }
+
+  confirmarEliminarSucursal(): void {
+    const target = this.sucAEliminar();
+    if (!target || !this.esAdministrador()) return;
+    this.savingSuc.set(true);
+    this.errorMensaje.set(null);
+
+    this.svc.eliminarSucursal(target.id).subscribe({
+      next: () => {
+        this.savingSuc.set(false);
+        this.sucAEliminar.set(null);
+        this.mostrarExito(`Sucursal "${target.nombre}" eliminada correctamente.`);
+        this.refrescarSucursales();
+      },
+      error: (err) => {
+        this.savingSuc.set(false);
+        this.sucAEliminar.set(null);
+        this.errorMensaje.set(
+          this.extraerMensajeError(err, 'No se pudo eliminar la sucursal.'),
+        );
+      },
+    });
+  }
+
+  private refrescarSucursales(): void {
+    this.svc.listarSucursales().subscribe((list) => this.sucursalesEmpresa.set(list));
+    this.invSvc.listarSucursales().subscribe((list) => this.sucursales.set(list));
+    this.invSvc.listarUbicaciones().subscribe((list) => this.ubicaciones.set(list));
   }
 
   // =====================================================================

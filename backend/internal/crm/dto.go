@@ -131,8 +131,9 @@ type ConvertirLeadRequest struct {
 }
 
 type ListarLeadsQuery struct {
-	EmpresaID         int32  `form:"empresa_id"          binding:"required,gt=0"`
-	SucursalID        int32  `form:"sucursal_id"         binding:"omitempty,gt=0"`
+	EmpresaID         int32   `form:"empresa_id"          binding:"required,gt=0"`
+	SucursalID        int32   `form:"sucursal_id"         binding:"omitempty,gt=0"`
+	SucursalIDsScope  []int32 `form:"-"`
 	OrigenID          int32  `form:"origen_id"           binding:"omitempty,gt=0"`
 	EstadoID          int32  `form:"estado_id"           binding:"omitempty,gt=0"`
 	UsuarioAsignadoID int64  `form:"usuario_asignado_id" binding:"omitempty,gt=0"`

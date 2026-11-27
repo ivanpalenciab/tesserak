@@ -213,6 +213,9 @@ func (r *Repository) ListStock(ctx context.Context, empresaID int32, f ListarSto
 	if f.UbicacionID > 0 {
 		q = q.Where("inv_stock.ubicacion_id = ?", f.UbicacionID)
 	}
+	if len(f.SucursalIDsScope) > 0 {
+		q = q.Where("u.sucursal_id IN ?", f.SucursalIDsScope)
+	}
 	if f.ArticuloID > 0 {
 		q = q.Where("inv_stock.articulo_id = ?", f.ArticuloID)
 	}
@@ -280,6 +283,9 @@ func (r *Repository) ListDocumentos(ctx context.Context, empresaID int32, f List
 
 	if f.TipoMovimientoID > 0 {
 		q = q.Where("inv_documentos.tipo_movimiento_id = ?", f.TipoMovimientoID)
+	}
+	if len(f.SucursalIDsScope) > 0 {
+		q = q.Where("inv_documentos.sucursal_id IN ?", f.SucursalIDsScope)
 	}
 	if f.UbicacionID > 0 {
 		q = q.Where(

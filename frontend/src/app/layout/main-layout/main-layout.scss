@@ -227,6 +227,28 @@
   display: flex;
   align-items: center;
   gap: 0.7rem;
+  padding: 0.45rem 0.5rem;
+  margin: -0.45rem -0.5rem 0;
+  border-radius: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background: rgba(148, 163, 184, 0.14);
+  }
+
+  &.active {
+    background: rgba(99, 102, 241, 0.22);
+  }
+}
+
+.user-chevron {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .avatar {

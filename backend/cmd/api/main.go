@@ -68,10 +68,15 @@ func main() {
 
 	api := r.Group("/api/v1")
 	auth.NewHandler(auth.NewService(db, cfg.JWTSecret)).RegisterRoutes(api)
-	empresas.NewHandler(empresas.NewService(empresas.NewRepository(db))).RegisterRoutes(api)
-	usuarios.NewHandler(usuarios.NewService(usuarios.NewRepository(db))).RegisterRoutes(api)
+	empresas.NewHandler(empresas.NewService(empresas.NewRepository(db))).
+		WithAuth(cfg.JWTSecret).
+		RegisterRoutes(api)
+	usuarios.NewHandler(usuarios.NewService(usuarios.NewRepository(db))).
+		WithAuth(cfg.JWTSecret).
+		RegisterRoutes(api)
 	crm.NewHandler(crm.NewService(crm.NewRepository(db))).
 		WithAuthMiddleware(auth.RequireAuth(cfg.JWTSecret)).
+		WithOptionalAuthMiddleware(auth.OptionalAuth(cfg.JWTSecret)).
 		RegisterRoutes(api)
 	productos.NewHandler(
 		productos.NewService(productos.NewRepository(db)),

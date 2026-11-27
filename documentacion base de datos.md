@@ -14,7 +14,7 @@ Este documento describe cómo está diseñada y construida la base de datos de *
 | Patrón | Dónde se aplica | Qué resuelve |
 |---|---|---|
 | **Multi-tenant con discriminador (`empresa_id`)** | `sucursales`, `usuarios`, `crm_*`, `tercero_maestro`, `articulos`, `listas_precios`, `com_compras`, `ventas`, `lealtad_*` | Múltiples empresas comparten la misma base de datos con aislamiento lógico por `empresa_id`. |
-| **Integridad multi-tenant por FK compuesta** | `usuarios (sucursal_id, empresa_id)`, `crm_leads (sucursal_id/origen_id/estado_id/motivo_descarte_id, empresa_id)`, `com_compras (sucursal_id, empresa_id)` | Impide a nivel de motor que un registro de la empresa A referencie una sucursal, origen, estado o motivo de la empresa B. |
+| **Integridad multi-tenant por FK compuesta** | `usuario_sucursales ((usuario_id, empresa_id), (sucursal_id, empresa_id))`, `crm_leads (sucursal_id/origen_id/estado_id/motivo_descarte_id, empresa_id)`, `com_compras (sucursal_id, empresa_id)`, `ven_ventas (sucursal_id/ubicacion_id/cliente_id, empresa_id)` | Impide a nivel de motor que un registro de la empresa A referencie un usuario, sucursal, ubicación, cliente, origen, estado o motivo de la empresa B. |
 | **Soft Delete + Índices únicos parciales** | `empresas`, `sucursales`, `usuarios`, `crm_*`, `tercero_maestro`, `roles_tercero`, `articulos`, `listas_precios`, `com_compras` | `deleted_at TIMESTAMPTZ` conserva el historial sin borrar físicamente. Los índices `UNIQUE (...) WHERE deleted_at IS NULL` permiten reutilizar emails, nombres de usuario, identificaciones, consecutivos o NITs de registros eliminados. |
 | **Supertipo–Subtipo para Artículos (Productos y Servicios)** | `articulos` → `productos` / `servicios` | Aísla los artículos por empresa (`empresa_id`) y separa los atributos comunes (`codigo`, `nombre`, `unidad_medida_id`, `categoria_id`, `grupo_impuesto_id`, `marca_id` opcional) de las extensiones 1:1 para productos físicos e inventario vs. servicios (duración en horas, modalidad, programación). |
 | **Party / Role (Supertipo–Subtipo / Class Table Inheritance)** | `tercero_maestro` → `tercero_empresa_roles` → `clientes` / `proveedores` / `empleados` | Cada empresa gestiona directamente sus terceros (`tercero_maestro.empresa_id`) y una misma persona o empresa puede ser simultáneamente cliente, proveedor y empleado sin duplicar sus datos de identidad. |
@@ -27,7 +27,7 @@ Este documento describe cómo está diseñada y construida la base de datos de *
 
 ---
 
-## 2. Diagrama ER de las tablas implementadas (Migraciones `000001` y `000002`)
+## 2. Diagrama ER del núcleo base y CRM (incluye `usuario_sucursales` de `000020`)
 
 ```mermaid
 erDiagram
@@ -35,7 +35,8 @@ erDiagram
     empresas ||--o{ sucursales : "opera"
     ciudades ||--o{ sucursales : "ubica"
     empresas ||--o{ usuarios : "pertenece"
-    sucursales ||--o{ usuarios : "asigna"
+    usuarios ||--o{ usuario_sucursales : "accede"
+    sucursales ||--o{ usuario_sucursales : "autoriza"
 
     empresas ||--o{ crm_origen_lead : "define"
     empresas ||--o{ crm_estado_lead : "define"
@@ -82,10 +83,11 @@ erDiagram
 
 | Tabla | Estado | Para qué sirve | Patrón de diseño |
 |---|---|---|---|
-| `usuarios` | Implementada (`000001`, `000010`) | Credenciales y perfil de acceso. Incluye identificador externo único `key` (`UUID v4`, `DEFAULT gen_random_uuid()`, índice `ux_usuarios_key`). Cada usuario pertenece a una sucursal y empresa (`FK (sucursal_id, empresa_id)`). Email y `nombre_usuario` son únicos por empresa (insensibles a mayúsculas) entre usuarios no borrados. Contraseña con `bcrypt`. | **Multi-tenant con FK compuesta + UUID v4 público + Soft Delete + Índice único parcial**. |
-| `roles_sistema` | Diseñada | Define roles de acceso al sistema (ej. Administrador, Vendedor, Cajero). | **RBAC (Role)**. |
+| `usuarios` | Implementada (`000001`, `000010`, `000020`) | Credenciales y perfil de acceso. Incluye identificador externo único `key` (`UUID v4`, `DEFAULT gen_random_uuid()`, índice `ux_usuarios_key`). Se asocia directamente a `empresas` (`empresa_id`) y expone `UNIQUE (id, empresa_id)`. Email y `nombre_usuario` son únicos por empresa (insensibles a mayúsculas) entre usuarios no borrados. Contraseña con `bcrypt`. | **Multi-tenant con Composite Key + UUID v4 público + Soft Delete + Índice único parcial**. |
+| `usuario_sucursales` | Implementada (`000020`) | Tabla intermedia N:M que relaciona `usuarios` con una o varias `sucursales` de la misma empresa (`es_principal` marca la sucursal predeterminada, con índice único parcial por usuario). Usa FKs compuestas `(usuario_id, empresa_id)` y `(sucursal_id, empresa_id)`. | **Tabla puente N:M + FKs compuestas multi-tenant**. |
+| `roles_sistema` | Implementada (`000021`–`000026`) | Catálogo global de roles de acceso al sistema con semilla `ADMINISTRADOR`, `ADMINISTRADOR_SUCURSAL`, `GESTOR_VENTAS`, `ASESOR_COMERCIAL`, `GESTOR_COMPRAS` y `USUARIO` (`es_sistema = TRUE`). | **RBAC (Role)**. |
 | `permisos` | Diseñada | Define permisos granulares de acciones en el sistema. | **RBAC (Permission)**. |
-| `usuario_roles` | Diseñada | Asigna uno o varios roles del sistema a cada usuario. | **Tabla puente N:M (RBAC)**. |
+| `usuario_roles` | Implementada (`000021`) | Asigna uno o varios roles de sistema a cada usuario (`PK (usuario_id, rol_id)`). | **Tabla puente N:M (RBAC)**. |
 | `rol_permisos` *(en drawio sin título)* | Diseñada | Asocia permisos a cada rol del sistema. | **Tabla puente N:M (RBAC)**. |
 
 ### 3.4 Módulo CRM (Gestión de prospectos y pipeline)
@@ -262,3 +264,26 @@ Permite emitir consecutivos automáticos y sin duplicados por empresa y tipo de 
 - **`ven_ventas_detalle`**: Líneas de artículos vendidos (`venta_id`, `articulo_id`, `cantidad`, `precio_unitario`, `subtotal`, `impuesto`, `total`).
 - **Cálculo automático de impuesto:** Al crear o actualizar ventas, el impuesto de cada línea se calcula automáticamente con la tarifa (`grupos_impuesto.tarifa`) del grupo de impuestos configurado en el artículo (`impuesto = subtotal * tarifa / 100`).
 - **Atomicidad con Inventario y exención de servicios:** Al registrar una venta (`REGISTRADA`/`PAGADA`) se ejecuta `SALIDA_VENTA` sobre `inv_documentos`, `inv_movimientos_detalle` e `inv_stock` dentro de la misma transacción únicamente para artículos de tipo `PRODUCTO` con `control_inventario = TRUE` (los **servicios** y productos sin control de inventario no validan ni descuentan existencias). Si falla el movimiento de inventario (ej. stock insuficiente), se realiza rollback completo de la venta. El mismo comportamiento transaccional y filtro de artículos inventariables aplica para `ENTRADA_COMPRA` en `com_compras`.
+
+---
+
+### Relación Usuarios ↔ Sucursales (`000020_usuario_sucursales`)
+
+- **Conexión directa con `empresas`:** Se conserva la relación directa `empresas` → `sucursales` (`sucursales.empresa_id`) y `empresas` → `usuarios` (`usuarios.empresa_id`), agregando `UNIQUE (id, empresa_id)` en `usuarios` (`uq_usuarios_id_empresa`).
+- **Tabla intermedia `usuario_sucursales`:** Reemplaza la relación 1:N anterior por una relación **N:M** que permite asignar múltiples sucursales de la misma empresa a un mismo usuario:
+  - Clave primaria compuesta: `(usuario_id, sucursal_id)`.
+  - Claves foráneas compuestas: `(usuario_id, empresa_id) → usuarios (id, empresa_id)` y `(sucursal_id, empresa_id) → sucursales (id, empresa_id)` con `ON DELETE CASCADE`, garantizando aislamiento multi-tenant a nivel de motor.
+  - Columna `es_principal BOOLEAN NOT NULL DEFAULT FALSE` con índice único parcial `ux_usuario_sucursales_principal (usuario_id) WHERE es_principal = TRUE` para identificar la sucursal predeterminada del usuario.
+- **Migración sin pérdida de datos y limpieza:** La migración `000020` copia automáticamente las asignaciones existentes de `usuarios.sucursal_id` hacia `usuario_sucursales` (`es_principal = TRUE`) y posteriormente elimina el índice `ix_usuarios_sucursal`, la llave foránea `fk_usuarios_sucursal_empresa` y la columna `usuarios.sucursal_id`.
+
+---
+
+### Roles de Sistema y Administrador (`000021_init_roles_sistema`)
+
+- **`roles_sistema`**: Catálogo global de roles del sistema (`codigo` único case-insensitive, `nombre`, `descripcion`, `es_sistema`, `activo`). Inserta por defecto los roles de sistema `ADMINISTRADOR` y `USUARIO`.
+- **`usuario_roles`**: Tabla puente N:M entre `usuarios` (`ON DELETE CASCADE`) y `roles_sistema` (`ON DELETE RESTRICT`).
+- **Backfill y regla de primer usuario:** La migración asigna `ADMINISTRADOR` al primer usuario (`ORDER BY id ASC`) de cada empresa existente y `USUARIO` a los demás. Al crear nuevos usuarios vía API, el primer usuario de una empresa nueva recibe automáticamente `ADMINISTRADOR`; a partir de ahí, solo un `ADMINISTRADOR` puede crear/editar/eliminar usuarios, acceder a Gestión de empresa y operar sobre todas las sucursales de su empresa.
+- **Rol `ADMINISTRADOR_SUCURSAL` (`000022_add_rol_admin_sucursal`):** Otorga acceso administrativo a todos los módulos dentro del alcance de las sucursales asignadas al usuario, permitiéndole crear, editar y eliminar usuarios y administrar ubicaciones únicamente dentro de sus sucursales asignadas (sin poder asignar el rol global `ADMINISTRADOR` ni modificar consecutivos de empresa).
+- **Rol `GESTOR_VENTAS` (`000023_add_rol_gestor_ventas`):** Solo permite crear y modificar ventas (sin eliminar) y gestionar terceros únicamente con el rol `CLIENTE` (crear clientes o asignar el rol `CLIENTE` a terceros existentes, sin agregar ni quitar otros roles ni eliminar terceros). Bloquea escritura en Compras, Inventario, Productos, Precios y acceso a módulos administrativos.
+- **Rol `ASESOR_COMERCIAL` (`000024`, actualizado en `000025`):** Acceso completo y exclusivo al módulo CRM (leads, oportunidades, campañas, actividades y configuración). Al ser los roles combinables (N:M en `usuario_roles`), un usuario puede tener `ASESOR_COMERCIAL` y extenderse con `GESTOR_VENTAS` u otros roles con permisos aditivos.
+- **Rol `GESTOR_COMPRAS` (`000026_add_rol_gestor_compras`):** Permite consultar, crear y modificar compras (sin eliminar). Combinable con otros roles de sistema en `usuario_roles`.

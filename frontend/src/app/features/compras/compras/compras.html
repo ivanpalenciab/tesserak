@@ -173,13 +173,15 @@
                     >
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      class="btn-icon danger"
-                      (click)="solicitarEliminar(compra, $event)"
-                    >
-                      Eliminar
-                    </button>
+                    @if (puedeEliminarCompras()) {
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminar(compra, $event)"
+                      >
+                        Eliminar
+                      </button>
+                    }
                   </div>
                 </td>
               </tr>

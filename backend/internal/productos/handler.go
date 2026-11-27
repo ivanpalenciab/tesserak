@@ -25,11 +25,11 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 		g.Use(h.authMiddleware)
 	}
 	h.registerCatalogoRoutes(g)
-	g.POST("", h.crear)
+	g.POST("", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.crear)
 	g.GET("", h.listar)
 	g.GET("/:id", h.obtener)
-	g.PATCH("/:id", h.actualizar)
-	g.DELETE("/:id", h.eliminar)
+	g.PATCH("/:id", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.actualizar)
+	g.DELETE("/:id", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.eliminar)
 }
 
 func (h *Handler) crear(c *gin.Context) {

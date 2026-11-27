@@ -16,7 +16,7 @@
     </div>
 
     <nav class="sidebar-nav" aria-label="Navegación principal">
-      @for (section of navSections; track section.title) {
+      @for (section of visibleNavSections(); track section.title) {
         <div class="nav-group">
           <span class="nav-title">{{ section.title }}</span>
           @for (item of section.items; track item.label) {
@@ -104,13 +104,31 @@
 
     <div class="sidebar-footer">
       @if (usuario(); as u) {
-        <div class="user-card">
+        <a
+          class="user-card"
+          routerLink="/mi-perfil"
+          routerLinkActive="active"
+          (click)="closeMobileMenu()"
+          title="Administrar mi perfil"
+        >
           <div class="avatar">{{ iniciales() }}</div>
           <div class="user-info">
             <span class="user-name">{{ u.nombres }} {{ u.apellidos }}</span>
             <span class="user-handle">&#64;{{ u.nombre_usuario }}</span>
           </div>
-        </div>
+          <svg
+            class="user-chevron"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </a>
       }
       <button type="button" class="btn-logout" (click)="logout()">Cerrar sesión</button>
     </div>

@@ -5,9 +5,12 @@ import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ActualizarSecuenciaRequest,
+  ActualizarSucursalRequest,
   CrearSecuenciaRequest,
+  CrearSucursalRequest,
   EmpresaDetalle,
   SecuenciaDocumento,
+  SucursalDetalle,
   TipoDocumentoConsecutivo,
   UsuarioKeyDetalle,
 } from './gestion-empresa.models';
@@ -57,5 +60,23 @@ export class GestionEmpresaService {
       `${this.api}/usuarios/${usuarioId}/regenerar-key`,
       {},
     );
+  }
+
+  listarSucursales(): Observable<SucursalDetalle[]> {
+    return this.http
+      .get<DataListResponse<SucursalDetalle>>(`${this.api}/empresas/sucursales`)
+      .pipe(map((r) => r.data ?? []));
+  }
+
+  crearSucursal(payload: CrearSucursalRequest): Observable<SucursalDetalle> {
+    return this.http.post<SucursalDetalle>(`${this.api}/empresas/sucursales`, payload);
+  }
+
+  actualizarSucursal(id: number, payload: ActualizarSucursalRequest): Observable<SucursalDetalle> {
+    return this.http.patch<SucursalDetalle>(`${this.api}/empresas/sucursales/${id}`, payload);
+  }
+
+  eliminarSucursal(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.api}/empresas/sucursales/${id}`);
   }
 }

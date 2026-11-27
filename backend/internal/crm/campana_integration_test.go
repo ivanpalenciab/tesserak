@@ -217,10 +217,15 @@ func setupFixturesIntegracion(t *testing.T, tx *gorm.DB) integracionFixtures {
 	mustExecScan(t, tx, `INSERT INTO sucursales (empresa_id, nombre) VALUES ($1, 'Principal') RETURNING id`, &sucA, f.empresaA)
 	mustExecScan(t, tx, `INSERT INTO sucursales (empresa_id, nombre) VALUES ($1, 'Principal') RETURNING id`, &sucB, f.empresaB)
 
-	mustExecScan(t, tx, `INSERT INTO usuarios (empresa_id, sucursal_id, nombre_usuario, nombres, apellidos, email, password_hash)
-		VALUES ($1, $2, $3, 'Ana', 'A', $4, 'hash') RETURNING id`, &f.usuarioA, f.empresaA, sucA, "usera_"+suffix, "a_"+suffix+"@test.local")
-	mustExecScan(t, tx, `INSERT INTO usuarios (empresa_id, sucursal_id, nombre_usuario, nombres, apellidos, email, password_hash)
-		VALUES ($1, $2, $3, 'Bob', 'B', $4, 'hash') RETURNING id`, &f.usuarioB, f.empresaB, sucB, "userb_"+suffix, "b_"+suffix+"@test.local")
+	mustExecScan(t, tx, `INSERT INTO usuarios (empresa_id, nombre_usuario, nombres, apellidos, email, password_hash)
+		VALUES ($1, $2, 'Ana', 'A', $3, 'hash') RETURNING id`, &f.usuarioA, f.empresaA, "usera_"+suffix, "a_"+suffix+"@test.local")
+	mustExecScan(t, tx, `INSERT INTO usuarios (empresa_id, nombre_usuario, nombres, apellidos, email, password_hash)
+		VALUES ($1, $2, 'Bob', 'B', $3, 'hash') RETURNING id`, &f.usuarioB, f.empresaB, "userb_"+suffix, "b_"+suffix+"@test.local")
+
+	if err := tx.Exec(`INSERT INTO usuario_sucursales (usuario_id, sucursal_id, empresa_id, es_principal) VALUES ($1, $2, $3, TRUE), ($4, $5, $6, TRUE)`,
+		f.usuarioA, sucA, f.empresaA, f.usuarioB, sucB, f.empresaB).Error; err != nil {
+		t.Fatalf("insert usuario_sucursales: %v", err)
+	}
 
 	mustExecScan(t, tx, `INSERT INTO monedas (codigo_iso, nombre_moneda, simbolo) VALUES ('U'||substr($1,1,2), 'Test USD', '$') RETURNING id`, &f.monedaUSD, suffix)
 	mustExecScan(t, tx, `INSERT INTO monedas (codigo_iso, nombre_moneda, simbolo) VALUES ('C'||substr($1,1,2), 'Test COP', '$') RETURNING id`, &f.monedaCOP, suffix)

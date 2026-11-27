@@ -29,6 +29,24 @@ func (r *Repository) RolesActivosExist(ctx context.Context, rolIDs []int32) (boo
 	return int(count) == len(rolIDs), err
 }
 
+// FindRolIDByCodigo devuelve el ID de un rol de tercero activo por su código (case-insensitive).
+func (r *Repository) FindRolIDByCodigo(ctx context.Context, codigo string) (int32, error) {
+	var id int32
+	res := r.db.WithContext(ctx).
+		Model(&RolTercero{}).
+		Select("id").
+		Where("upper(codigo) = upper(?) AND activo = TRUE", codigo).
+		Limit(1).
+		Scan(&id)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return 0, ErrRolesInvalidos
+	}
+	return id, nil
+}
+
 func (r *Repository) CreateTercero(ctx context.Context, t *TerceroMaestro) error {
 	return r.db.WithContext(ctx).Omit(clause.Associations).Create(t).Error
 }

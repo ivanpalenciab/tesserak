@@ -1,0 +1,163 @@
+<section class="perfil-page">
+  <header class="page-header">
+    <div>
+      <h1>Mi perfil</h1>
+      <p class="subtitle">
+        Administra tu información personal y actualiza tu contraseña de acceso.
+      </p>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <div class="card state-box">Cargando tu información...</div>
+  } @else {
+    @if (perfil(); as p) {
+      <div class="summary-card">
+        <div class="avatar-lg">{{ iniciales() }}</div>
+        <div class="summary-main">
+          <h2>{{ p.nombres }} {{ p.apellidos }}</h2>
+          <p class="muted">{{ '@' + p.nombre_usuario }} · {{ p.email }}</p>
+          <div class="summary-badges">
+            @for (r of p.roles; track r.id) {
+              <span
+                class="badge"
+                [class.badge-admin]="r.codigo === 'ADMINISTRADOR'"
+                [class.badge-user]="r.codigo !== 'ADMINISTRADOR'"
+              >
+                {{ r.nombre }}
+              </span>
+            }
+            @if (p.es_administrador || p.todas_sucursales) {
+              <span class="badge badge-all">Acceso a todas las sucursales</span>
+            } @else {
+              @for (sid of p.sucursal_ids; track sid) {
+                <span class="chip">{{ nombreSucursal(sid) }}</span>
+              }
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <div class="perfil-grid">
+      <!-- Tarjeta 1: Datos personales -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Información personal</h3>
+          <p>Actualiza tu nombre, apellido, nombre de usuario y correo electrónico.</p>
+        </div>
+
+        @if (infoSuccess()) {
+          <div class="alert success">{{ infoSuccess() }}</div>
+        }
+        @if (infoError()) {
+          <div class="alert error">{{ infoError() }}</div>
+        }
+
+        <form [formGroup]="infoForm" (ngSubmit)="guardarInformacion()" class="form-stack">
+          <div class="two-cols">
+            <label class="field">
+              <span>Nombres *</span>
+              <input type="text" formControlName="nombres" placeholder="Tus nombres" />
+              @if (campoInfoInvalido('nombres')) {
+                <small class="field-error">Ingresa tus nombres.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Apellidos *</span>
+              <input type="text" formControlName="apellidos" placeholder="Tus apellidos" />
+              @if (campoInfoInvalido('apellidos')) {
+                <small class="field-error">Ingresa tus apellidos.</small>
+              }
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Nombre de usuario *</span>
+            <input type="text" formControlName="nombre_usuario" placeholder="Ej. jperez" />
+            @if (campoInfoInvalido('nombre_usuario')) {
+              <small class="field-error">Mínimo 3 caracteres.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Correo electrónico *</span>
+            <input type="email" formControlName="email" placeholder="correo@empresa.com" />
+            @if (campoInfoInvalido('email')) {
+              <small class="field-error">Ingresa un correo electrónico válido.</small>
+            }
+          </label>
+
+          <div class="card-actions">
+            <button type="submit" class="btn-primary" [disabled]="savingInfo()">
+              {{ savingInfo() ? 'Guardando...' : 'Guardar información' }}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Tarjeta 2: Cambio de contraseña -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Cambiar contraseña</h3>
+          <p>Por seguridad, debes ingresar tu contraseña actual antes de definir una nueva.</p>
+        </div>
+
+        @if (passwordSuccess()) {
+          <div class="alert success">{{ passwordSuccess() }}</div>
+        }
+        @if (passwordError()) {
+          <div class="alert error">{{ passwordError() }}</div>
+        }
+
+        <form [formGroup]="passwordForm" (ngSubmit)="cambiarPassword()" class="form-stack">
+          <label class="field">
+            <span>Contraseña actual *</span>
+            <input
+              type="password"
+              formControlName="password_actual"
+              autocomplete="current-password"
+              placeholder="Ingresa tu contraseña actual"
+            />
+            @if (campoPassInvalido('password_actual')) {
+              <small class="field-error">Debes ingresar tu contraseña actual.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Nueva contraseña *</span>
+            <input
+              type="password"
+              formControlName="password_nueva"
+              autocomplete="new-password"
+              placeholder="Mínimo 8 caracteres"
+            />
+            @if (campoPassInvalido('password_nueva')) {
+              <small class="field-error">La nueva contraseña debe tener al menos 8 caracteres.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Confirmar nueva contraseña *</span>
+            <input
+              type="password"
+              formControlName="confirmar_password"
+              autocomplete="new-password"
+              placeholder="Repite la nueva contraseña"
+            />
+            @if (campoPassInvalido('confirmar_password')) {
+              <small class="field-error">Confirma tu nueva contraseña.</small>
+            }
+          </label>
+
+          <div class="card-actions">
+            <button type="submit" class="btn-primary" [disabled]="savingPassword()">
+              {{ savingPassword() ? 'Actualizando...' : 'Actualizar contraseña' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</section>

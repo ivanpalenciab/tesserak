@@ -18,6 +18,7 @@ interface NavItem {
   icon: string;
   badge?: string;
   disabled?: boolean;
+  permission?: 'admin' | 'crm' | 'ventas' | 'compras' | 'terceros' | 'operacion';
   children?: NavSubItem[];
 }
 
@@ -61,6 +62,7 @@ export class MainLayoutComponent {
         {
           label: 'CRM',
           icon: 'crm',
+          permission: 'crm',
           children: [
             { label: 'Resumen comercial', disabled: true, badge: 'Pronto' },
             { label: 'Leads', route: '/crm/leads' },
@@ -72,17 +74,18 @@ export class MainLayoutComponent {
             { label: 'Configuración', route: '/crm/configuracion' },
           ],
         },
-        { label: 'Ventas', route: '/ventas', icon: 'sales' },
-        { label: 'Lealtad', icon: 'loyalty', disabled: true, badge: 'Pronto' },
+        { label: 'Ventas', route: '/ventas', icon: 'sales', permission: 'ventas' },
+        { label: 'Lealtad', icon: 'loyalty', disabled: true, badge: 'Pronto', permission: 'operacion' },
       ],
     },
     {
       title: 'Operación',
       items: [
-        { label: 'Terceros', route: '/terceros', icon: 'contacts' },
+        { label: 'Terceros', route: '/terceros', icon: 'contacts', permission: 'terceros' },
         {
           label: 'Productos',
           icon: 'products',
+          permission: 'operacion',
           children: [
             { label: 'Catálogo', route: '/productos/catalogo' },
             { label: 'Categorías', route: '/productos/categorias' },
@@ -90,18 +93,51 @@ export class MainLayoutComponent {
             { label: 'Configuración', route: '/productos/configuracion' },
           ],
         },
-        { label: 'Compras', route: '/compras', icon: 'purchases' },
-        { label: 'Inventario', route: '/inventario', icon: 'inventory' },
+        { label: 'Compras', route: '/compras', icon: 'purchases', permission: 'compras' },
+        { label: 'Inventario', route: '/inventario', icon: 'inventory', permission: 'operacion' },
       ],
     },
     {
       title: 'Administración',
       items: [
-        { label: 'Gestión de empresa', route: '/gestion-empresa', icon: 'company' },
-        { label: 'Usuarios', route: '/usuarios', icon: 'users', badge: 'API' },
+        { label: 'Gestión de empresa', route: '/gestion-empresa', icon: 'company', permission: 'admin' },
+        { label: 'Usuarios', route: '/usuarios', icon: 'users', permission: 'operacion' },
       ],
     },
   ];
+
+  readonly visibleNavSections = computed<NavSection[]>(() => {
+    const canAdmin = this.auth.puedeAdministrarUsuarios();
+    const canCRM = this.auth.puedeAccederCRM();
+    const canVentas = this.auth.puedeAccederVentas();
+    const canCompras = this.auth.puedeAccederCompras();
+    const canTerceros = this.auth.puedeAccederTerceros();
+    const canOperacion = this.auth.puedeAccederOperacion();
+
+    return this.navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => {
+          switch (item.permission) {
+            case 'admin':
+              return canAdmin;
+            case 'crm':
+              return canCRM;
+            case 'ventas':
+              return canVentas;
+            case 'compras':
+              return canCompras;
+            case 'terceros':
+              return canTerceros;
+            case 'operacion':
+              return canOperacion;
+            default:
+              return true;
+          }
+        }),
+      }))
+      .filter((section) => section.items.length > 0);
+  });
 
   constructor() {
     this.syncExpandedWithUrl(this.router.url);

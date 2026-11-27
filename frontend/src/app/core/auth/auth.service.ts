@@ -20,6 +20,70 @@ export class AuthService {
   readonly token = this._token.asReadonly();
   readonly usuario = this._usuario.asReadonly();
   readonly isAuthenticated = computed(() => Boolean(this._token() && this._usuario()));
+  readonly esAdministrador = computed(() => {
+    const u = this._usuario();
+    if (!u) return false;
+    if (u.es_administrador) return true;
+    return (u.roles ?? []).some((r) => r.toUpperCase() === 'ADMINISTRADOR');
+  });
+  readonly esAdminSucursal = computed(() => {
+    const u = this._usuario();
+    if (!u) return false;
+    if (u.es_admin_sucursal) return true;
+    return (u.roles ?? []).some((r) => r.toUpperCase() === 'ADMINISTRADOR_SUCURSAL');
+  });
+  readonly puedeAdministrarUsuarios = computed(
+    () => this.esAdministrador() || this.esAdminSucursal(),
+  );
+  readonly esGestorVentas = computed(() => {
+    const u = this._usuario();
+    if (!u) return false;
+    if (u.es_gestor_ventas) return true;
+    return (u.roles ?? []).some((r) => r.toUpperCase() === 'GESTOR_VENTAS');
+  });
+  readonly esAsesorComercial = computed(() => {
+    const u = this._usuario();
+    if (!u) return false;
+    if (u.es_asesor_comercial) return true;
+    return (u.roles ?? []).some((r) => r.toUpperCase() === 'ASESOR_COMERCIAL');
+  });
+  readonly esGestorCompras = computed(() => {
+    const u = this._usuario();
+    if (!u) return false;
+    if (u.es_gestor_compras) return true;
+    return (u.roles ?? []).some((r) => r.toUpperCase() === 'GESTOR_COMPRAS');
+  });
+
+  // Capacidades aditivas (unión de roles asignados al usuario)
+  readonly tieneAccesoOperativoCompleto = computed(() => {
+    const u = this._usuario();
+    if (!u) return false;
+    if (this.puedeAdministrarUsuarios()) return true;
+    if ((u.roles ?? []).some((r) => r.toUpperCase() === 'USUARIO')) return true;
+    return !this.esGestorVentas() && !this.esAsesorComercial() && !this.esGestorCompras();
+  });
+
+  readonly puedeAccederCRM = computed(
+    () => this.tieneAccesoOperativoCompleto() || this.esAsesorComercial(),
+  );
+  readonly puedeAccederVentas = computed(
+    () => this.tieneAccesoOperativoCompleto() || this.esGestorVentas(),
+  );
+  readonly puedeEliminarVentas = computed(() => this.tieneAccesoOperativoCompleto());
+  readonly puedeAccederCompras = computed(
+    () => this.tieneAccesoOperativoCompleto() || this.esGestorCompras(),
+  );
+  readonly puedeEliminarCompras = computed(() => this.tieneAccesoOperativoCompleto());
+  readonly puedeAccederTerceros = computed(
+    () => this.tieneAccesoOperativoCompleto() || this.esGestorVentas(),
+  );
+  readonly esSoloGestorVentas = computed(
+    () => !this.tieneAccesoOperativoCompleto() && this.esGestorVentas(),
+  );
+  readonly esSoloAsesorComercial = computed(
+    () => !this.tieneAccesoOperativoCompleto() && this.esAsesorComercial() && !this.esGestorVentas(),
+  );
+  readonly puedeAccederOperacion = computed(() => this.tieneAccesoOperativoCompleto());
 
   login(payload: LoginRequest, recordar = true): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${environment.apiUrl}/auth/login`, payload).pipe(
@@ -39,6 +103,19 @@ export class AuthService {
     this._token.set(null);
     this._usuario.set(null);
     void this.router.navigate(['/login']);
+  }
+
+  actualizarUsuarioLocal(parcial: Partial<UsuarioAutenticado>): void {
+    const actual = this._usuario();
+    if (!actual) return;
+    const actualizado: UsuarioAutenticado = { ...actual, ...parcial };
+    this._usuario.set(actualizado);
+    if (localStorage.getItem(USER_KEY) !== null) {
+      localStorage.setItem(USER_KEY, JSON.stringify(actualizado));
+    }
+    if (sessionStorage.getItem(USER_KEY) !== null) {
+      sessionStorage.setItem(USER_KEY, JSON.stringify(actualizado));
+    }
   }
 
   private readStorage(key: string): string | null {

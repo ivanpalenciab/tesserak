@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { catchError, of } from 'rxjs';
 
 import { ApiErrorBody } from '../../../core/auth/auth.models';
+import { AuthService } from '../../../core/auth/auth.service';
 import { TercerosService } from '../terceros.service';
 import {
   ActualizarTerceroRequest,
@@ -38,8 +39,10 @@ export const NATURALEZAS_JURIDICAS: { value: NaturalezaJuridica; label: string }
 })
 export class TercerosComponent implements OnInit {
   private readonly tercerosSvc = inject(TercerosService);
+  private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
+  readonly esSoloGestorVentas = this.auth.esSoloGestorVentas;
   readonly tiposIdentificacion = TIPOS_IDENTIFICACION;
   readonly naturalezasJuridicas = NATURALEZAS_JURIDICAS;
 
@@ -193,7 +196,18 @@ export class TercerosComponent implements OnInit {
     return this.rolesSeleccionados().includes(rolId);
   }
 
+  esRolEditable(rol: RolTercero): boolean {
+    if (!this.esSoloGestorVentas()) return true;
+    return rol.codigo.toUpperCase() === 'CLIENTE';
+  }
+
   toggleRolSeleccionado(rolId: number): void {
+    if (this.esSoloGestorVentas()) {
+      const rol = this.rolesDisponibles().find((r) => r.id === rolId);
+      if (!rol || rol.codigo.toUpperCase() !== 'CLIENTE') {
+        return;
+      }
+    }
     this.rolesTouched.set(true);
     this.rolesSeleccionados.update((actuales) =>
       actuales.includes(rolId) ? actuales.filter((id) => id !== rolId) : [...actuales, rolId],
@@ -207,7 +221,14 @@ export class TercerosComponent implements OnInit {
   abrirNuevoTercero(): void {
     this.editandoTercero.set(null);
     this.modalTerceroError.set(null);
-    this.rolesSeleccionados.set([]);
+    if (this.esSoloGestorVentas()) {
+      const clienteRol = this.rolesDisponibles().find(
+        (r) => r.codigo.toUpperCase() === 'CLIENTE',
+      );
+      this.rolesSeleccionados.set(clienteRol ? [clienteRol.id] : []);
+    } else {
+      this.rolesSeleccionados.set([]);
+    }
     this.rolesTouched.set(false);
     this.formTercero.reset({
       tipo_identificacion: 'NIT',

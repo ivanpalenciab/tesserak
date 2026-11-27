@@ -28,14 +28,14 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	g.GET("/sucursales", h.listarSucursales)
 	g.GET("/tipos-movimiento", h.listarTiposMovimiento)
 
-	g.POST("/ubicaciones", h.crearUbicacion)
+	g.POST("/ubicaciones", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.crearUbicacion)
 	g.GET("/ubicaciones", h.listarUbicaciones)
-	g.PATCH("/ubicaciones/:id", h.actualizarUbicacion)
-	g.DELETE("/ubicaciones/:id", h.eliminarUbicacion)
+	g.PATCH("/ubicaciones/:id", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.actualizarUbicacion)
+	g.DELETE("/ubicaciones/:id", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.eliminarUbicacion)
 
 	g.GET("/stock", h.listarStock)
 
-	g.POST("/movimientos", h.crearMovimiento)
+	g.POST("/movimientos", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.crearMovimiento)
 	g.GET("/movimientos", h.listarMovimientos)
 	g.GET("/movimientos/:id", h.obtenerMovimiento)
 }
@@ -49,6 +49,15 @@ func (h *Handler) listarSucursales(c *gin.Context) {
 	if err != nil {
 		httpx.RespondError(c, err)
 		return
+	}
+	if !claims.IsAdmin() {
+		filtradas := make([]SucursalResponse, 0, len(resp))
+		for _, s := range resp {
+			if claims.HasSucursal(s.ID) {
+				filtradas = append(filtradas, s)
+			}
+		}
+		resp = filtradas
 	}
 	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
@@ -75,6 +84,14 @@ func (h *Handler) crearUbicacion(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	targetSucursal := claims.SucursalID
+	if req.SucursalID != nil {
+		targetSucursal = *req.SucursalID
+	}
+	if !claims.HasSucursal(targetSucursal) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+		return
+	}
 	resp, err := h.svc.CrearUbicacion(c.Request.Context(), claims.EmpresaID, claims.SucursalID, req)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -97,6 +114,15 @@ func (h *Handler) listarUbicaciones(c *gin.Context) {
 	if err != nil {
 		httpx.RespondError(c, err)
 		return
+	}
+	if !claims.IsAdmin() {
+		filtradas := make([]UbicacionResponse, 0, len(resp))
+		for _, u := range resp {
+			if claims.HasSucursal(u.SucursalID) {
+				filtradas = append(filtradas, u)
+			}
+		}
+		resp = filtradas
 	}
 	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
@@ -151,6 +177,7 @@ func (h *Handler) listarStock(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	q.SucursalIDsScope = claims.AllowedSucursalIDs()
 	resp, err := h.svc.ListarStock(c.Request.Context(), claims.EmpresaID, q)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -167,6 +194,14 @@ func (h *Handler) crearMovimiento(c *gin.Context) {
 	var req CrearMovimientoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.RespondError(c, httpx.BindError(err))
+		return
+	}
+	targetSucursal := claims.SucursalID
+	if req.SucursalID != nil {
+		targetSucursal = *req.SucursalID
+	}
+	if !claims.HasSucursal(targetSucursal) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
 		return
 	}
 	resp, err := h.svc.CrearMovimiento(c.Request.Context(), claims.EmpresaID, claims.SucursalID, claims.Sub, req)
@@ -187,6 +222,7 @@ func (h *Handler) listarMovimientos(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	q.SucursalIDsScope = claims.AllowedSucursalIDs()
 	resp, err := h.svc.ListarMovimientos(c.Request.Context(), claims.EmpresaID, q)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -208,6 +244,10 @@ func (h *Handler) obtenerMovimiento(c *gin.Context) {
 	resp, err := h.svc.ObtenerMovimiento(c.Request.Context(), claims.EmpresaID, id)
 	if err != nil {
 		httpx.RespondError(c, err)
+		return
+	}
+	if !claims.HasSucursal(resp.SucursalID) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
 		return
 	}
 	c.JSON(http.StatusOK, resp)

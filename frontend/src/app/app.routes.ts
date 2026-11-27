@@ -1,6 +1,15 @@
 import { Routes } from '@angular/router';
 
-import { authGuard, guestGuard } from './core/auth/auth.guard';
+import {
+  adminOrBranchAdminGuard,
+  authGuard,
+  comprasGuard,
+  crmGuard,
+  guestGuard,
+  operacionGuard,
+  tercerosGuard,
+  ventasGuard,
+} from './core/auth/auth.guard';
 
 export const routes: Routes = [
   {
@@ -24,6 +33,7 @@ export const routes: Routes = [
       },
       {
         path: 'crm',
+        canActivate: [crmGuard],
         children: [
           {
             path: 'resumen',
@@ -106,6 +116,7 @@ export const routes: Routes = [
       },
       {
         path: 'productos',
+        canActivate: [operacionGuard],
         children: [
           {
             path: 'catalogo',
@@ -148,30 +159,35 @@ export const routes: Routes = [
       },
       {
         path: 'terceros',
+        canActivate: [tercerosGuard],
         loadComponent: () =>
           import('./features/terceros/terceros/terceros').then((m) => m.TercerosComponent),
         title: 'Terceros — Tesserak',
       },
       {
         path: 'compras',
+        canActivate: [comprasGuard],
         loadComponent: () =>
           import('./features/compras/compras/compras').then((m) => m.ComprasComponent),
         title: 'Compras — Tesserak',
       },
       {
         path: 'ventas',
+        canActivate: [ventasGuard],
         loadComponent: () =>
           import('./features/ventas/ventas/ventas').then((m) => m.VentasComponent),
         title: 'Ventas — Tesserak',
       },
       {
         path: 'inventario',
+        canActivate: [operacionGuard],
         loadComponent: () =>
           import('./features/inventario/inventario/inventario').then((m) => m.InventarioComponent),
         title: 'Inventarios — Tesserak',
       },
       {
         path: 'gestion-empresa',
+        canActivate: [adminOrBranchAdminGuard],
         loadComponent: () =>
           import('./features/administracion/gestion-empresa/gestion-empresa').then(
             (m) => m.GestionEmpresaComponent,
@@ -185,14 +201,16 @@ export const routes: Routes = [
       },
       {
         path: 'usuarios',
+        canActivate: [operacionGuard],
         loadComponent: () =>
-          import('./features/coming-soon/coming-soon').then((m) => m.ComingSoonComponent),
-        data: {
-          titulo: 'Gestión de Usuarios',
-          descripcion:
-            'El backend CRUD de usuarios está activo en /api/v1/usuarios. Aquí agregaremos el listado por sucursal, creación y control de estado.',
-        },
+          import('./features/usuarios/usuarios/usuarios').then((m) => m.UsuariosComponent),
         title: 'Usuarios — Tesserak',
+      },
+      {
+        path: 'mi-perfil',
+        loadComponent: () =>
+          import('./features/usuarios/mi-perfil/mi-perfil').then((m) => m.MiPerfilComponent),
+        title: 'Mi perfil — Tesserak',
       },
       {
         path: '',

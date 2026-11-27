@@ -1,0 +1,512 @@
+<section class="usuarios-page">
+  <header class="page-header">
+    <div>
+      <h1>Usuarios</h1>
+      <p class="subtitle">
+        Administra los usuarios de tu empresa, asigna roles de sistema y gestiona el acceso a
+        sucursales.
+      </p>
+    </div>
+    <div class="header-actions">
+      @if (puedeGestionar()) {
+        <button type="button" class="btn-primary" (click)="abrirCrear()">
+          + Nuevo usuario
+        </button>
+      }
+    </div>
+  </header>
+
+  @if (!puedeGestionar()) {
+    <div class="alert info">
+      Solo los usuarios con el rol <strong>Administrador</strong> o
+      <strong>Administrador de sucursal</strong> pueden crear nuevos usuarios, asignar roles de
+      sistema o gestionar permisos de acceso a sucursales.
+    </div>
+  } @else if (esAdminSucursal() && !esAdministrador()) {
+    <div class="alert info">
+      Estás operando como <strong>Administrador de sucursal</strong>: puedes crear y administrar
+      usuarios únicamente dentro del alcance de tus sucursales asignadas.
+    </div>
+  }
+
+  @if (success()) {
+    <div class="alert success">{{ success() }}</div>
+  }
+  @if (error()) {
+    <div class="alert error">{{ error() }}</div>
+  }
+
+  <div class="filters-panel">
+    <input
+      type="search"
+      placeholder="Buscar por nombre, usuario o correo..."
+      [value]="filtroQ()"
+      (input)="onBuscar($any($event.target).value)"
+    />
+
+    <select
+      [value]="filtroSucursalId() ?? ''"
+      (change)="onFiltroSucursal($any($event.target).value)"
+    >
+      <option value="">Todas las sucursales</option>
+      @for (s of sucursales(); track s.id) {
+        <option [value]="s.id">{{ s.nombre }}</option>
+      }
+    </select>
+
+    <select [value]="filtroActivo()" (change)="onFiltroActivo($any($event.target).value)">
+      <option value="">Todos los estados</option>
+      <option value="true">Activos</option>
+      <option value="false">Inactivos</option>
+    </select>
+
+    @if (filtroQ() || filtroSucursalId() || filtroActivo()) {
+      <button type="button" class="btn-link" (click)="limpiarFiltros()">Limpiar filtros</button>
+    }
+  </div>
+
+  <div class="table-card">
+    @if (loading()) {
+      <div class="state-box">Cargando usuarios...</div>
+    } @else if (usuarios().length === 0) {
+      <div class="state-box">
+        No se encontraron usuarios con los criterios seleccionados.
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Correo</th>
+              <th>Rol de sistema</th>
+              <th>Acceso a sucursales</th>
+              <th>Estado</th>
+              @if (puedeGestionar()) {
+                <th class="col-actions">Acciones</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of usuarios(); track u.id) {
+              <tr>
+                <td>
+                  <div class="user-cell">
+                    <strong>{{ u.nombres }} {{ u.apellidos }}</strong>
+                    <span class="muted">{{ '@' + u.nombre_usuario }}</span>
+                  </div>
+                </td>
+                <td>{{ u.email }}</td>
+                <td>
+                  <div class="chips-wrap">
+                    @for (r of u.roles; track r.id) {
+                      <span
+                        class="badge"
+                        [class.badge-admin]="r.codigo === 'ADMINISTRADOR'"
+                        [class.badge-branch-admin]="r.codigo === 'ADMINISTRADOR_SUCURSAL'"
+                        [class.badge-sales]="r.codigo === 'GESTOR_VENTAS'"
+                        [class.badge-commercial]="r.codigo === 'ASESOR_COMERCIAL'"
+                        [class.badge-purchases]="r.codigo === 'GESTOR_COMPRAS'"
+                        [class.badge-user]="
+                          r.codigo !== 'ADMINISTRADOR' &&
+                          r.codigo !== 'ADMINISTRADOR_SUCURSAL' &&
+                          r.codigo !== 'GESTOR_VENTAS' &&
+                          r.codigo !== 'ASESOR_COMERCIAL' &&
+                          r.codigo !== 'GESTOR_COMPRAS'
+                        "
+                      >
+                        {{ r.nombre }}
+                      </span>
+                    } @empty {
+                      <span class="badge badge-user">Sin rol</span>
+                    }
+                  </div>
+                </td>
+                <td>
+                  @if (u.es_administrador || u.todas_sucursales) {
+                    <span class="badge badge-all-branches">Todas las sucursales</span>
+                  } @else {
+                    <div class="chips-wrap">
+                      @for (sid of u.sucursal_ids; track sid) {
+                        <span class="chip">{{ nombreSucursal(sid) }}</span>
+                      } @empty {
+                        <span class="muted">Sin sucursales</span>
+                      }
+                    </div>
+                  }
+                </td>
+                <td>
+                  <span class="status-pill" [class.active]="u.activo" [class.inactive]="!u.activo">
+                    {{ u.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                @if (puedeGestionar()) {
+                  <td class="col-actions">
+                    @if (puedeModificarUsuario(u)) {
+                      <button type="button" class="btn-link" (click)="abrirPermisos(u)">
+                        Rol y sucursales
+                      </button>
+                      <button type="button" class="btn-link" (click)="abrirEditar(u)">Editar</button>
+                      @if (u.id !== usuarioActualId()) {
+                        <button type="button" class="btn-link danger" (click)="confirmarEliminar(u)">
+                          Eliminar
+                        </button>
+                      }
+                    } @else {
+                      <span class="muted">Solo lectura</span>
+                    }
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <footer class="table-footer">
+        <span>Mostrando {{ usuarios().length }} de {{ total() }} usuarios</span>
+        <div class="pagination">
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() <= 1"
+            (click)="cambiarPagina(-1)"
+          >
+            Anterior
+          </button>
+          <span>Página {{ page() }} de {{ totalPaginas() }}</span>
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="page() >= totalPaginas()"
+            (click)="cambiarPagina(1)"
+          >
+            Siguiente
+          </button>
+        </div>
+      </footer>
+    }
+  </div>
+</section>
+
+<!-- Modal Crear / Editar Usuario -->
+@if (modalAbierto() && puedeGestionar()) {
+  <div class="modal-backdrop" (click)="cerrarModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>{{ editando() ? 'Editar usuario' : 'Crear nuevo usuario' }}</h2>
+        <button type="button" class="close-btn" (click)="cerrarModal()" aria-label="Cerrar">
+          ✕
+        </button>
+      </header>
+
+      <form [formGroup]="form" (ngSubmit)="guardar()" class="modal-body">
+        @if (modalError()) {
+          <div class="alert error">{{ modalError() }}</div>
+        }
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Nombres *</span>
+            <input type="text" formControlName="nombres" placeholder="Ej. Ana María" />
+            @if (campoInvalido('nombres')) {
+              <small class="field-error">Ingresa los nombres del usuario.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Apellidos *</span>
+            <input type="text" formControlName="apellidos" placeholder="Ej. Gómez" />
+            @if (campoInvalido('apellidos')) {
+              <small class="field-error">Ingresa los apellidos del usuario.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Nombre de usuario *</span>
+            <input type="text" formControlName="nombre_usuario" placeholder="Ej. agomez" />
+            @if (campoInvalido('nombre_usuario')) {
+              <small class="field-error">Mínimo 3 caracteres (sin espacios).</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>Correo electrónico *</span>
+            <input type="email" formControlName="email" placeholder="ana@empresa.com" />
+            @if (campoInvalido('email')) {
+              <small class="field-error">Ingresa un correo electrónico válido.</small>
+            }
+          </label>
+
+          <label class="field">
+            <span>
+              Contraseña {{ editando() ? '(opcional)' : '*' }}
+            </span>
+            <input
+              type="password"
+              formControlName="password"
+              [placeholder]="editando() ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'"
+            />
+            @if (campoInvalido('password')) {
+              <small class="field-error">La contraseña debe tener al menos 8 caracteres.</small>
+            }
+          </label>
+        </div>
+
+        <div class="branches-section">
+          <div class="branches-header">
+            <div class="branches-title">Roles de sistema * (puedes combinar varios)</div>
+            <span class="branches-count">{{ rolesSeleccionados().length }} seleccionado(s)</span>
+          </div>
+          <p class="branches-hint">
+            Los permisos se suman entre sí (por ejemplo: Asesor comercial + Gestor de ventas).
+          </p>
+          <div class="branches-grid">
+            @for (r of roles(); track r.id) {
+              <label class="branch-option" [class.selected]="estaRolSeleccionado(r.id)">
+                <input
+                  type="checkbox"
+                  [checked]="estaRolSeleccionado(r.id)"
+                  (change)="toggleRol(r.id)"
+                />
+                <div class="branch-info">
+                  <strong>{{ r.nombre }}</strong>
+                  @if (r.descripcion) {
+                    <span>{{ r.descripcion }}</span>
+                  }
+                </div>
+              </label>
+            }
+          </div>
+          @if (errorRoles()) {
+            <div class="field-error">{{ errorRoles() }}</div>
+          }
+        </div>
+
+        <div class="branches-section">
+          <div class="branches-header">
+            <div class="branches-title">Permisos de acceso a sucursales</div>
+            @if (!rolSeleccionadoEsAdmin() && sucursales().length > 0) {
+              <div class="branches-actions">
+                <span class="branches-count">
+                  {{ sucursalesSeleccionadas().length }} de {{ sucursales().length }} seleccionadas
+                </span>
+                <button type="button" class="btn-mini" (click)="seleccionarTodasSucursales()">
+                  Dar todas
+                </button>
+                <button type="button" class="btn-mini" (click)="quitarTodasSucursales()">
+                  Quitar todas
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (rolSeleccionadoEsAdmin()) {
+            <div class="admin-branches-note">
+              <strong>Acceso total:</strong> El rol <strong>Administrador</strong> tiene acceso
+              automático a todas las sucursales activas de la empresa (incluyendo las nuevas que se
+              creen), a Gestión de empresa y a la creación/administración de usuarios.
+            </div>
+          } @else {
+            <p class="branches-hint">
+              Marca las sucursales a las que deseas otorgar permiso y desmarca las que deseas
+              restringir:
+            </p>
+            @if (sucursales().length === 0) {
+              <div class="alert error">
+                No hay sucursales activas registradas para esta empresa.
+              </div>
+            } @else {
+              <div class="branches-grid">
+                @for (s of sucursales(); track s.id) {
+                  <label
+                    class="branch-option"
+                    [class.selected]="estaSucursalSeleccionada(s.id)"
+                  >
+                    <input
+                      type="checkbox"
+                      [checked]="estaSucursalSeleccionada(s.id)"
+                      (change)="toggleSucursal(s.id)"
+                    />
+                    <div class="branch-info">
+                      <strong>{{ s.nombre }}</strong>
+                      @if (s.direccion) {
+                        <span>{{ s.direccion }}</span>
+                      }
+                    </div>
+                  </label>
+                }
+              </div>
+            }
+            @if (errorSucursales()) {
+              <div class="field-error">{{ errorSucursales() }}</div>
+            }
+          }
+        </div>
+
+        <label class="checkbox-inline">
+          <input type="checkbox" formControlName="activo" />
+          <span>Usuario activo</span>
+        </label>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cerrarModal()" [disabled]="saving()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            {{ saving() ? 'Guardando...' : editando() ? 'Guardar cambios' : 'Crear usuario' }}
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal rápido: Asignar rol y dar/quitar acceso a sucursales -->
+@if (modalPermisosUsuario(); as u) {
+  <div class="modal-backdrop" (click)="cerrarPermisos()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div>
+          <h2>Rol y permisos de sucursales</h2>
+          <p class="modal-sub">
+            {{ u.nombres }} {{ u.apellidos }} ({{ '@' + u.nombre_usuario }})
+          </p>
+        </div>
+        <button type="button" class="close-btn" (click)="cerrarPermisos()" aria-label="Cerrar">
+          ✕
+        </button>
+      </header>
+
+      <div class="modal-body">
+        @if (permisosError()) {
+          <div class="alert error">{{ permisosError() }}</div>
+        }
+
+        <div class="branches-section">
+          <div class="branches-header">
+            <div class="branches-title">Roles de sistema (puedes combinar varios)</div>
+            <span class="branches-count">{{ permisosRolIds().length }} seleccionado(s)</span>
+          </div>
+          <p class="branches-hint">
+            Selecciona uno o varios roles para combinar sus permisos (ej. Asesor comercial + Gestor
+            de ventas):
+          </p>
+          <div class="branches-grid">
+            @for (r of roles(); track r.id) {
+              <label class="branch-option" [class.selected]="estaPermisoRol(r.id)">
+                <input
+                  type="checkbox"
+                  [checked]="estaPermisoRol(r.id)"
+                  (change)="togglePermisoRol(r.id)"
+                />
+                <div class="branch-info">
+                  <strong>{{ r.nombre }}</strong>
+                  @if (r.descripcion) {
+                    <span>{{ r.descripcion }}</span>
+                  }
+                </div>
+              </label>
+            }
+          </div>
+        </div>
+
+        <div class="branches-section">
+          <div class="branches-header">
+            <div class="branches-title">Acceso a sucursales</div>
+            @if (!permisosRolEsAdmin() && sucursales().length > 0) {
+              <div class="branches-actions">
+                <span class="branches-count">
+                  {{ permisosSucursales().length }} de {{ sucursales().length }} con acceso
+                </span>
+                <button type="button" class="btn-mini" (click)="seleccionarTodasPermisos()">
+                  Dar todas
+                </button>
+                <button type="button" class="btn-mini" (click)="quitarTodasPermisos()">
+                  Quitar todas
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (permisosRolEsAdmin()) {
+            <div class="admin-branches-note">
+              <strong>Acceso total:</strong> Al asignar el rol <strong>Administrador</strong>, este
+              usuario obtiene acceso automático a todas las sucursales de la empresa, Gestión de
+              empresa y administración de usuarios.
+            </div>
+          } @else {
+            <p class="branches-hint">
+              Activa o desactiva las sucursales a las que este usuario puede acceder:
+            </p>
+            <div class="branches-grid">
+              @for (s of sucursales(); track s.id) {
+                <label
+                  class="branch-option"
+                  [class.selected]="estaPermisoSucursal(s.id)"
+                >
+                  <input
+                    type="checkbox"
+                    [checked]="estaPermisoSucursal(s.id)"
+                    (change)="togglePermisoSucursal(s.id)"
+                  />
+                  <div class="branch-info">
+                    <strong>{{ s.nombre }}</strong>
+                    @if (s.direccion) {
+                      <span>{{ s.direccion }}</span>
+                    }
+                  </div>
+                </label>
+              }
+            </div>
+          }
+        </div>
+
+        <footer class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarPermisos()"
+            [disabled]="saving()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn-primary"
+            (click)="guardarPermisos()"
+            [disabled]="saving()"
+          >
+            {{ saving() ? 'Guardando...' : 'Guardar permisos' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal Confirmar Eliminación -->
+@if (usuarioAEliminar(); as u) {
+  <div class="modal-backdrop" (click)="cancelarEliminar()">
+    <div class="modal-card modal-sm" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Eliminar usuario</h2>
+        <button type="button" class="close-btn" (click)="cancelarEliminar()" aria-label="Cerrar">
+          ✕
+        </button>
+      </header>
+      <div class="modal-body">
+        <p>
+          ¿Seguro que deseas eliminar al usuario
+          <strong>{{ u.nombres }} {{ u.apellidos }}</strong> ({{ '@' + u.nombre_usuario }})?
+        </p>
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="cancelarEliminar()">Cancelar</button>
+          <button type="button" class="btn-danger" (click)="ejecutarEliminar()" [disabled]="saving()">
+            {{ saving() ? 'Eliminando...' : 'Eliminar' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+}

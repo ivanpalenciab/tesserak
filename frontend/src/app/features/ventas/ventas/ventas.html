@@ -113,9 +113,11 @@
                     <button type="button" class="btn-icon" (click)="abrirEditarVenta(v)">
                       Editar
                     </button>
-                    <button type="button" class="btn-icon danger" (click)="solicitarEliminar(v)">
-                      Eliminar
-                    </button>
+                    @if (puedeEliminarVentas()) {
+                      <button type="button" class="btn-icon danger" (click)="solicitarEliminar(v)">
+                        Eliminar
+                      </button>
+                    }
                   </div>
                 </td>
               </tr>

@@ -7,20 +7,43 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"tesserak/backend/internal/auth"
 	"tesserak/backend/internal/httpx"
 )
 
 type Handler struct {
-	svc *Service
+	svc       *Service
+	jwtSecret string
 }
 
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// RegisterRoutes registra las rutas del recurso /empresas.
+// WithAuth habilita la verificación JWT y de rol ADMINISTRADOR en las rutas de sucursales.
+func (h *Handler) WithAuth(jwtSecret string) *Handler {
+	h.jwtSecret = jwtSecret
+	return h
+}
+
+// RegisterRoutes registra las rutas del recurso /empresas y /empresas/sucursales.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	g := rg.Group("/empresas")
+
+	sucs := g.Group("/sucursales")
+	if h.jwtSecret != "" {
+		sucs.Use(auth.RequireAuth(h.jwtSecret))
+		sucs.GET("", h.listarSucursales)
+		sucs.POST("", auth.RequireAdmin(), h.crearSucursal)
+		sucs.PATCH("/:id", auth.RequireAdmin(), h.actualizarSucursal)
+		sucs.DELETE("/:id", auth.RequireAdmin(), h.eliminarSucursal)
+	} else {
+		sucs.GET("", h.listarSucursales)
+		sucs.POST("", h.crearSucursal)
+		sucs.PATCH("/:id", h.actualizarSucursal)
+		sucs.DELETE("/:id", h.eliminarSucursal)
+	}
+
 	g.POST("", h.crear)
 	g.GET("", h.listar)
 	g.GET("/:id", h.obtener)

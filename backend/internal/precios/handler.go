@@ -26,18 +26,18 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	}
 
 	// Cabecera: listas_precios
-	g.POST("", h.crearLista)
+	g.POST("", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.crearLista)
 	g.GET("", h.listarListas)
 	g.GET("/:id", h.obtenerLista)
-	g.PATCH("/:id", h.actualizarLista)
-	g.DELETE("/:id", h.eliminarLista)
+	g.PATCH("/:id", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.actualizarLista)
+	g.DELETE("/:id", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.eliminarLista)
 
 	// Detalle: lista_precios_detalle
-	g.POST("/:id/detalles", h.crearDetalle)
+	g.POST("/:id/detalles", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.crearDetalle)
 	g.GET("/:id/detalles", h.listarDetalles)
 	g.GET("/:id/detalles/:detalleId", h.obtenerDetalle)
-	g.PATCH("/:id/detalles/:detalleId", h.actualizarDetalle)
-	g.DELETE("/:id/detalles/:detalleId", h.eliminarDetalle)
+	g.PATCH("/:id/detalles/:detalleId", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.actualizarDetalle)
+	g.DELETE("/:id/detalles/:detalleId", auth.RequirePermission((*auth.Claims).CanManageOperacion), h.eliminarDetalle)
 }
 
 func (h *Handler) crearLista(c *gin.Context) {

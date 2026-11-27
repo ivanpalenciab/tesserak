@@ -24,11 +24,11 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	if h.authMiddleware != nil {
 		g.Use(h.authMiddleware)
 	}
-	g.POST("", h.crear)
-	g.GET("", h.listar)
-	g.GET("/:id", h.obtener)
-	g.PATCH("/:id", h.actualizar)
-	g.DELETE("/:id", h.eliminar)
+	g.POST("", auth.RequirePermission((*auth.Claims).CanAccessVentas), h.crear)
+	g.GET("", auth.RequirePermission((*auth.Claims).CanAccessVentas), h.listar)
+	g.GET("/:id", auth.RequirePermission((*auth.Claims).CanAccessVentas), h.obtener)
+	g.PATCH("/:id", auth.RequirePermission((*auth.Claims).CanAccessVentas), h.actualizar)
+	g.DELETE("/:id", auth.RequirePermission((*auth.Claims).CanDeleteVentas), h.eliminar)
 }
 
 func (h *Handler) crear(c *gin.Context) {
@@ -39,6 +39,14 @@ func (h *Handler) crear(c *gin.Context) {
 	var req CrearVentaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.RespondError(c, httpx.BindError(err))
+		return
+	}
+	targetSucursal := claims.SucursalID
+	if req.SucursalID != nil {
+		targetSucursal = *req.SucursalID
+	}
+	if !claims.HasSucursal(targetSucursal) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
 		return
 	}
 	resp, err := h.svc.Crear(c.Request.Context(), claims.EmpresaID, claims.SucursalID, claims.Sub, req)
@@ -59,6 +67,7 @@ func (h *Handler) listar(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	q.SucursalIDsScope = claims.AllowedSucursalIDs()
 	resp, err := h.svc.Listar(c.Request.Context(), claims.EmpresaID, q)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -82,6 +91,10 @@ func (h *Handler) obtener(c *gin.Context) {
 		httpx.RespondError(c, err)
 		return
 	}
+	if !claims.HasSucursal(resp.SucursalID) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+		return
+	}
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -100,6 +113,21 @@ func (h *Handler) actualizar(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	if !claims.IsAdmin() {
+		if req.SucursalID != nil && !claims.HasSucursal(*req.SucursalID) {
+			httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+			return
+		}
+		actual, err := h.svc.Obtener(c.Request.Context(), claims.EmpresaID, id)
+		if err != nil {
+			httpx.RespondError(c, err)
+			return
+		}
+		if !claims.HasSucursal(actual.SucursalID) {
+			httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+			return
+		}
+	}
 	resp, err := h.svc.Actualizar(c.Request.Context(), claims.EmpresaID, id, req)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -117,6 +145,17 @@ func (h *Handler) eliminar(c *gin.Context) {
 	if err != nil {
 		httpx.RespondError(c, err)
 		return
+	}
+	if !claims.IsAdmin() {
+		actual, err := h.svc.Obtener(c.Request.Context(), claims.EmpresaID, id)
+		if err != nil {
+			httpx.RespondError(c, err)
+			return
+		}
+		if !claims.HasSucursal(actual.SucursalID) {
+			httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+			return
+		}
 	}
 	if err := h.svc.Eliminar(c.Request.Context(), claims.EmpresaID, id); err != nil {
 		httpx.RespondError(c, err)

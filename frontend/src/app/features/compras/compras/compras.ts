@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { catchError, forkJoin, of, switchMap } from 'rxjs';
 
 import { ApiErrorBody } from '../../../core/auth/auth.models';
+import { AuthService } from '../../../core/auth/auth.service';
 import { CrmService } from '../../crm/crm.service';
 import { Moneda } from '../../crm/crm.models';
 import { ProductosService } from '../../productos/productos.service';
@@ -45,8 +46,10 @@ export class ComprasComponent implements OnInit {
   private readonly productosSvc = inject(ProductosService);
   private readonly tercerosSvc = inject(TercerosService);
   private readonly crmSvc = inject(CrmService);
+  private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
+  readonly puedeEliminarCompras = this.auth.puedeEliminarCompras;
   readonly estadosCompra = ESTADOS_COMPRA_OPCIONES;
 
   // Estado general y alertas

@@ -10,8 +10,24 @@ import (
 	"gorm.io/gorm"
 
 	"tesserak/backend/internal/httpx"
-	"tesserak/backend/internal/usuarios"
 )
+
+// usuarioAuthRow mapea los campos necesarios de la tabla "usuarios" para evitar
+// acoplamiento circular con el paquete internal/usuarios.
+type usuarioAuthRow struct {
+	ID            int64          `gorm:"column:id;primaryKey"`
+	Key           string         `gorm:"column:key"`
+	EmpresaID     int32          `gorm:"column:empresa_id"`
+	NombreUsuario string         `gorm:"column:nombre_usuario"`
+	Nombres       string         `gorm:"column:nombres"`
+	Apellidos     string         `gorm:"column:apellidos"`
+	Email         string         `gorm:"column:email"`
+	PasswordHash  string         `gorm:"column:password_hash"`
+	Activo        bool           `gorm:"column:activo"`
+	DeletedAt     gorm.DeletedAt `gorm:"column:deleted_at"`
+}
+
+func (usuarioAuthRow) TableName() string { return "usuarios" }
 
 const tokenTTL = 12 * time.Hour
 
@@ -32,14 +48,21 @@ type LoginRequest struct {
 }
 
 type UsuarioAutenticado struct {
-	ID            int64  `json:"id"`
-	Key           string `json:"key"`
-	EmpresaID     int32  `json:"empresa_id"`
-	SucursalID    int32  `json:"sucursal_id"`
-	NombreUsuario string `json:"nombre_usuario"`
-	Nombres       string `json:"nombres"`
-	Apellidos     string `json:"apellidos"`
-	Email         string `json:"email"`
+	ID              int64    `json:"id"`
+	Key             string   `json:"key"`
+	EmpresaID       int32    `json:"empresa_id"`
+	SucursalID      int32    `json:"sucursal_id"`
+	SucursalIDs     []int32  `json:"sucursal_ids"`
+	Roles           []string `json:"roles"`
+	EsAdministrador   bool     `json:"es_administrador"`
+	EsAdminSucursal   bool     `json:"es_admin_sucursal"`
+	EsGestorVentas    bool     `json:"es_gestor_ventas"`
+	EsAsesorComercial bool     `json:"es_asesor_comercial"`
+	EsGestorCompras   bool     `json:"es_gestor_compras"`
+	NombreUsuario     string   `json:"nombre_usuario"`
+	Nombres         string   `json:"nombres"`
+	Apellidos       string   `json:"apellidos"`
+	Email           string   `json:"email"`
 }
 
 type LoginResponse struct {
@@ -68,7 +91,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 
 	q := s.db.WithContext(ctx).
-		Model(&usuarios.Usuario{}).
+		Model(&usuarioAuthRow{}).
 		Where("lower(usuarios.email) = ? OR lower(usuarios.nombre_usuario) = ?", identificador, identificador)
 
 	if req.IdentificadorFiscal != nil && strings.TrimSpace(*req.IdentificadorFiscal) != "" {
@@ -77,7 +100,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 			Where("empresas.identificador_fiscal = ?", nit)
 	}
 
-	var encontrados []usuarios.Usuario
+	var encontrados []usuarioAuthRow
 	if err := q.Limit(2).Find(&encontrados).Error; err != nil {
 		return nil, err
 	}
@@ -96,16 +119,93 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrUsuarioInactivo
 	}
 
+	// Consultar roles de sistema asignados al usuario
+	var roles []string
+	if err := s.db.WithContext(ctx).
+		Table("usuario_roles ur").
+		Select("rs.codigo").
+		Joins("JOIN roles_sistema rs ON rs.id = ur.rol_id AND rs.activo = TRUE").
+		Where("ur.usuario_id = ?", u.ID).
+		Order("rs.id ASC").
+		Pluck("rs.codigo", &roles).Error; err != nil {
+		return nil, err
+	}
+	if roles == nil {
+		roles = []string{}
+	}
+	esAdmin := false
+	esAdminSucursal := false
+	esGestorVentas := false
+	esAsesorComercial := false
+	esGestorCompras := false
+	for _, r := range roles {
+		if strings.EqualFold(r, RolAdministrador) {
+			esAdmin = true
+		}
+		if strings.EqualFold(r, RolAdminSucursal) {
+			esAdminSucursal = true
+		}
+		if strings.EqualFold(r, RolGestorVentas) {
+			esGestorVentas = true
+		}
+		if strings.EqualFold(r, RolAsesorComercial) {
+			esAsesorComercial = true
+		}
+		if strings.EqualFold(r, RolGestorCompras) {
+			esGestorCompras = true
+		}
+	}
+
+	// Resolver sucursales accesibles:
+	// - Si es ADMINISTRADOR, tiene acceso automático a TODAS las sucursales activas de su empresa.
+	// - En caso contrario, solo a las sucursales activas asignadas en usuario_sucursales.
+	var sucursalIDs []int32
+	if esAdmin {
+		if err := s.db.WithContext(ctx).
+			Table("sucursales s").
+			Select("s.id").
+			Joins("LEFT JOIN usuario_sucursales us ON us.sucursal_id = s.id AND us.usuario_id = ?", u.ID).
+			Where("s.empresa_id = ? AND s.activo = TRUE AND s.deleted_at IS NULL", u.EmpresaID).
+			Order("COALESCE(us.es_principal, FALSE) DESC, s.id ASC").
+			Pluck("s.id", &sucursalIDs).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.db.WithContext(ctx).
+			Table("usuario_sucursales us").
+			Select("us.sucursal_id").
+			Joins("JOIN sucursales s ON s.id = us.sucursal_id AND s.activo = TRUE AND s.deleted_at IS NULL").
+			Where("us.usuario_id = ?", u.ID).
+			Order("us.es_principal DESC, us.sucursal_id ASC").
+			Pluck("us.sucursal_id", &sucursalIDs).Error; err != nil {
+			return nil, err
+		}
+	}
+	if sucursalIDs == nil {
+		sucursalIDs = []int32{}
+	}
+	var sucursalPrincipal int32
+	if len(sucursalIDs) > 0 {
+		sucursalPrincipal = sucursalIDs[0]
+	}
+
 	now := time.Now().UTC()
 	_ = s.db.WithContext(ctx).Model(&u).UpdateColumn("ultimo_login_at", now).Error
 
 	claims := Claims{
-		Sub:        u.ID,
-		EmpresaID:  u.EmpresaID,
-		SucursalID: u.SucursalID,
-		Email:      u.Email,
-		Iat:        now.Unix(),
-		Exp:        now.Add(tokenTTL).Unix(),
+		Sub:             u.ID,
+		EmpresaID:       u.EmpresaID,
+		SucursalID:      sucursalPrincipal,
+		SucursalIDs:     sucursalIDs,
+		Roles:           roles,
+		EsAdministrador:   esAdmin,
+		EsAdminSucursal:   esAdminSucursal,
+		EsGestorVentas:    esGestorVentas,
+		EsAsesorComercial: esAsesorComercial,
+		EsGestorCompras:   esGestorCompras,
+		Email:             u.Email,
+		Iat:               now.Unix(),
+		Exp:               now.Add(tokenTTL).Unix(),
 	}
 	token, err := SignHS256(claims, s.jwtSecret)
 	if err != nil {
@@ -117,14 +217,21 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		TokenType:   "Bearer",
 		ExpiresIn:   int64(tokenTTL.Seconds()),
 		Usuario: UsuarioAutenticado{
-			ID:            u.ID,
-			Key:           u.Key,
-			EmpresaID:     u.EmpresaID,
-			SucursalID:    u.SucursalID,
-			NombreUsuario: u.NombreUsuario,
-			Nombres:       u.Nombres,
-			Apellidos:     u.Apellidos,
-			Email:         u.Email,
+			ID:                u.ID,
+			Key:               u.Key,
+			EmpresaID:         u.EmpresaID,
+			SucursalID:        sucursalPrincipal,
+			SucursalIDs:       sucursalIDs,
+			Roles:             roles,
+			EsAdministrador:   esAdmin,
+			EsAdminSucursal:   esAdminSucursal,
+			EsGestorVentas:    esGestorVentas,
+			EsAsesorComercial: esAsesorComercial,
+			EsGestorCompras:   esGestorCompras,
+			NombreUsuario:   u.NombreUsuario,
+			Nombres:         u.Nombres,
+			Apellidos:       u.Apellidos,
+			Email:           u.Email,
 		},
 	}, nil
 }

@@ -26,18 +26,18 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	}
 
 	roles := g.Group("/roles")
-	roles.POST("", h.crearRol)
+	roles.POST("", auth.RequirePermission((*auth.Claims).CanManageTercerosFull), h.crearRol)
 	roles.GET("", h.listarRoles)
 	roles.GET("/:id", h.obtenerRol)
-	roles.PATCH("/:id", h.actualizarRol)
-	roles.DELETE("/:id", h.eliminarRol)
+	roles.PATCH("/:id", auth.RequirePermission((*auth.Claims).CanManageTercerosFull), h.actualizarRol)
+	roles.DELETE("/:id", auth.RequirePermission((*auth.Claims).CanManageTercerosFull), h.eliminarRol)
 
 	// Tercero maestro (aislado por empresa_id, con soft delete)
-	g.POST("", h.crearTercero)
+	g.POST("", auth.RequirePermission((*auth.Claims).CanManageTercerosCliente), h.crearTercero)
 	g.GET("", h.listarTerceros)
 	g.GET("/:id", h.obtenerTercero)
-	g.PATCH("/:id", h.actualizarTercero)
-	g.DELETE("/:id", h.eliminarTercero)
+	g.PATCH("/:id", auth.RequirePermission((*auth.Claims).CanManageTercerosCliente), h.actualizarTercero)
+	g.DELETE("/:id", auth.RequirePermission((*auth.Claims).CanManageTercerosFull), h.eliminarTercero)
 }
 
 func (h *Handler) crearRol(c *gin.Context) {
@@ -148,7 +148,7 @@ func (h *Handler) crearTercero(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
-	resp, err := h.svc.CrearTercero(c.Request.Context(), claims.EmpresaID, req)
+	resp, err := h.svc.CrearTercero(c.Request.Context(), claims.EmpresaID, req, claims.IsOnlyTercerosCliente())
 	if err != nil {
 		httpx.RespondError(c, err)
 		return
@@ -207,7 +207,7 @@ func (h *Handler) actualizarTercero(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
-	resp, err := h.svc.ActualizarTercero(c.Request.Context(), claims.EmpresaID, id, req)
+	resp, err := h.svc.ActualizarTercero(c.Request.Context(), claims.EmpresaID, id, req, claims.IsOnlyTercerosCliente())
 	if err != nil {
 		httpx.RespondError(c, err)
 		return

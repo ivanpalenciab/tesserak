@@ -90,6 +90,9 @@ func (r *Repository) List(ctx context.Context, empresaID int32, f ListarComprasQ
 	if f.SucursalID > 0 {
 		q = q.Where("sucursal_id = ?", f.SucursalID)
 	}
+	if len(f.SucursalIDsScope) > 0 {
+		q = q.Where("sucursal_id IN ?", f.SucursalIDsScope)
+	}
 	if f.Estado != "" {
 		q = q.Where("estado = ?", f.Estado)
 	}

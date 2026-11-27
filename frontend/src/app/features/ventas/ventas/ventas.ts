@@ -3,6 +3,7 @@ import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } fr
 import { HttpErrorResponse } from '@angular/common/http';
 import { catchError, forkJoin, of } from 'rxjs';
 
+import { AuthService } from '../../../core/auth/auth.service';
 import { ApiErrorBody } from '../../../core/auth/auth.models';
 import { ProductosService } from '../../productos/productos.service';
 import { GrupoImpuesto, Producto } from '../../productos/productos.models';
@@ -39,8 +40,10 @@ export class VentasComponent implements OnInit {
   private readonly productosSvc = inject(ProductosService);
   private readonly tercerosSvc = inject(TercerosService);
   private readonly invSvc = inject(InventarioService);
+  private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
+  readonly puedeEliminarVentas = this.auth.puedeEliminarVentas;
   readonly estados = ESTADOS_VENTA;
 
   // Listado y filtros

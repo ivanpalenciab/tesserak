@@ -59,9 +59,33 @@ export interface UsuarioKeyDetalle {
   key: string;
   empresa_id: number;
   sucursal_id: number;
+  sucursal_ids?: number[];
   nombre_usuario: string;
   nombres: string;
   apellidos: string;
   email: string;
   activo: boolean;
+}
+
+export interface SucursalDetalle {
+  id: number;
+  empresa_id: number;
+  ciudad_id: number | null;
+  nombre: string;
+  direccion: string | null;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CrearSucursalRequest {
+  nombre: string;
+  direccion?: string | null;
+  activo?: boolean;
+}
+
+export interface ActualizarSucursalRequest {
+  nombre?: string;
+  direccion?: string | null;
+  activo?: boolean;
 }

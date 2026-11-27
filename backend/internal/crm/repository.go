@@ -199,6 +199,9 @@ func (r *Repository) ListLeads(ctx context.Context, f ListarLeadsQuery) ([]Lead,
 	if f.SucursalID > 0 {
 		q = q.Where("sucursal_id = ?", f.SucursalID)
 	}
+	if len(f.SucursalIDsScope) > 0 {
+		q = q.Where("(sucursal_id IS NULL OR sucursal_id IN ?)", f.SucursalIDsScope)
+	}
 	if f.OrigenID > 0 {
 		q = q.Where("origen_id = ?", f.OrigenID)
 	}

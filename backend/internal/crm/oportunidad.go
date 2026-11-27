@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"tesserak/backend/internal/auth"
 	"tesserak/backend/internal/httpx"
 )
 
@@ -97,8 +98,9 @@ type CambiarEstadoOportunidadRequest struct {
 }
 
 type ListarOportunidadesQuery struct {
-	EmpresaID           int32  `form:"empresa_id"            binding:"required,gt=0"`
-	EstadoOportunidadID int32  `form:"estado_oportunidad_id" binding:"omitempty,gt=0"`
+	EmpresaID           int32   `form:"empresa_id"            binding:"required,gt=0"`
+	SucursalIDsScope    []int32 `form:"-"`
+	EstadoOportunidadID int32   `form:"estado_oportunidad_id" binding:"omitempty,gt=0"`
 	LeadID              int64  `form:"lead_id"               binding:"omitempty,gt=0"`
 	CampanaID           int64  `form:"campana_id"            binding:"omitempty,gt=0"`
 	Prioridad           string `form:"prioridad"             binding:"omitempty,oneof=BAJA MEDIA ALTA"`
@@ -186,6 +188,10 @@ func (r *Repository) FindOportunidadByID(ctx context.Context, id int64) (*Oportu
 
 func (r *Repository) ListOportunidades(ctx context.Context, f ListarOportunidadesQuery) ([]Oportunidad, int64, error) {
 	q := r.db.WithContext(ctx).Model(&Oportunidad{}).Where("empresa_id = ?", f.EmpresaID)
+
+	if len(f.SucursalIDsScope) > 0 {
+		q = q.Where("(sucursal_id IS NULL OR sucursal_id IN ?)", f.SucursalIDsScope)
+	}
 
 	if f.EstadoOportunidadID > 0 {
 		q = q.Where("estado_oportunidad_id = ?", f.EstadoOportunidadID)
@@ -519,6 +525,10 @@ func (h *Handler) crearOportunidad(c *gin.Context) {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
 	}
+	if claims, ok := auth.ClaimsFromContext(c); ok && req.SucursalID != nil && !claims.HasSucursal(*req.SucursalID) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
+		return
+	}
 	resp, err := h.svc.CrearOportunidad(c.Request.Context(), req)
 	if err != nil {
 		httpx.RespondError(c, err)
@@ -532,6 +542,9 @@ func (h *Handler) listarOportunidades(c *gin.Context) {
 	if err := c.ShouldBindQuery(&q); err != nil {
 		httpx.RespondError(c, httpx.BindError(err))
 		return
+	}
+	if claims, ok := auth.ClaimsFromContext(c); ok {
+		q.SucursalIDsScope = claims.AllowedSucursalIDs()
 	}
 	resp, err := h.svc.ListarOportunidades(c.Request.Context(), q)
 	if err != nil {
@@ -550,6 +563,10 @@ func (h *Handler) obtenerOportunidad(c *gin.Context) {
 	resp, err := h.svc.ObtenerOportunidad(c.Request.Context(), id)
 	if err != nil {
 		httpx.RespondError(c, err)
+		return
+	}
+	if claims, ok := auth.ClaimsFromContext(c); ok && resp.SucursalID != nil && !claims.HasSucursal(*resp.SucursalID) {
+		httpx.RespondError(c, auth.ErrSucursalNoAutorizada)
 		return
 	}
 	c.JSON(http.StatusOK, resp)

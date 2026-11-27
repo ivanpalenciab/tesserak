@@ -43,8 +43,9 @@ type ActualizarVentaRequest struct {
 }
 
 type ListarVentasQuery struct {
-	SucursalID  int32  `form:"sucursal_id"  binding:"omitempty,gt=0"`
-	UbicacionID int32  `form:"ubicacion_id" binding:"omitempty,gt=0"`
+	SucursalID       int32   `form:"sucursal_id"  binding:"omitempty,gt=0"`
+	SucursalIDsScope []int32 `form:"-"`
+	UbicacionID      int32   `form:"ubicacion_id" binding:"omitempty,gt=0"`
 	ClienteID   int64  `form:"cliente_id"   binding:"omitempty,gt=0"`
 	Estado      string `form:"estado"       binding:"omitempty,oneof=BORRADOR REGISTRADA PAGADA ANULADA"`
 	FechaDesde  string `form:"fecha_desde"`

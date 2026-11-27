@@ -8,6 +8,21 @@ describe('MainLayoutComponent', () => {
   beforeEach(async () => {
     localStorage.clear();
     sessionStorage.clear();
+    localStorage.setItem('tesserak_token', 'test-token');
+    localStorage.setItem(
+      'tesserak_user',
+      JSON.stringify({
+        id: 1,
+        empresa_id: 1,
+        sucursal_id: 1,
+        roles: ['ADMINISTRADOR'],
+        es_administrador: true,
+        nombre_usuario: 'admin',
+        nombres: 'Admin',
+        apellidos: 'Test',
+        email: 'admin@tesserak.local',
+      }),
+    );
 
     await TestBed.configureTestingModule({
       imports: [MainLayoutComponent],

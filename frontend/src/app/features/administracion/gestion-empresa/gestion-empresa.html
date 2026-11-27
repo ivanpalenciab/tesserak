@@ -33,7 +33,8 @@
   @if (loading()) {
     <div class="panel empty-box">Cargando configuración de empresa...</div>
   } @else {
-    <!-- Sección 1: Prefijos de Compras y Ventas -->
+    <!-- Sección 1: Prefijos de Compras y Ventas (solo Administrador de empresa) -->
+    @if (esAdministrador()) {
     <section class="panel" aria-label="Prefijos de documentos">
       <div class="panel-header">
         <div>
@@ -120,6 +121,79 @@
         </div>
       }
     </section>
+    }
+
+    <!-- Sección 1b: Sucursales de la empresa (solo Administrador) -->
+    @if (esAdministrador()) {
+      <section class="panel" aria-label="Sucursales de la empresa">
+        <div class="panel-header panel-header-row">
+          <div>
+            <h2>Sucursales</h2>
+            <p class="subtitle">
+              Crea, edita, activa/desactiva o elimina las sucursales o sedes físicas de tu empresa.
+            </p>
+          </div>
+          <button type="button" class="btn-primary" (click)="abrirNuevaSucursal()">
+            + Nueva sucursal
+          </button>
+        </div>
+
+        @if (sucursalesEmpresa().length === 0) {
+          <div class="empty-box">Aún no hay sucursales registradas para tu empresa.</div>
+        } @else {
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Dirección</th>
+                  <th>Estado</th>
+                  <th class="actions-col">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (s of sucursalesEmpresa(); track s.id) {
+                  <tr>
+                    <td><strong>{{ s.nombre }}</strong></td>
+                    <td>{{ s.direccion || '—' }}</td>
+                    <td>
+                      <span
+                        class="status-badge"
+                        [class.active]="s.activo"
+                        [class.inactive]="!s.activo"
+                      >
+                        {{ s.activo ? 'Activa' : 'Inactiva' }}
+                      </span>
+                    </td>
+                    <td class="actions-col">
+                      <div class="row-actions">
+                        <button type="button" class="btn-icon" (click)="abrirEditarSucursal(s)">
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-icon"
+                          (click)="toggleActivoSucursal(s)"
+                        >
+                          {{ s.activo ? 'Desactivar' : 'Activar' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-icon danger"
+                          (click)="solicitarEliminarSucursal(s)"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
 
     <!-- Sección 2: Ubicaciones / Bodegas de inventario -->
     <section class="panel" aria-label="Ubicaciones de inventario">
@@ -355,6 +429,124 @@
           [disabled]="savingUbic()"
         >
           {{ savingUbic() ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal crear / editar sucursal -->
+@if (modalSucAbierto()) {
+  <div class="modal-backdrop" (click)="cerrarModalSucursal()">
+    <div
+      class="modal-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>{{ editandoSuc() ? 'Editar sucursal' : 'Nueva sucursal' }}</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cerrarModalSucursal()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      @if (modalSucError(); as err) {
+        <div class="alert error" role="alert">{{ err }}</div>
+      }
+
+      <form [formGroup]="formSuc" (ngSubmit)="guardarSucursal()" class="modal-form">
+        <label class="field">
+          <span>Nombre de la sucursal *</span>
+          <input
+            type="text"
+            formControlName="nombre"
+            maxlength="150"
+            placeholder="Ej. Sede Norte"
+          />
+          @if (formSuc.controls.nombre.touched && formSuc.controls.nombre.invalid) {
+            <small class="field-error">Ingresa el nombre de la sucursal.</small>
+          }
+        </label>
+
+        <label class="field">
+          <span>Dirección</span>
+          <input
+            type="text"
+            formControlName="direccion"
+            maxlength="255"
+            placeholder="Ej. Calle 100 # 15-20"
+          />
+        </label>
+
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="activo" />
+          <span>Sucursal activa</span>
+        </label>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn-secondary"
+            (click)="cerrarModalSucursal()"
+            [disabled]="savingSuc()"
+          >
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="savingSuc()">
+            {{ savingSuc() ? 'Guardando...' : editandoSuc() ? 'Guardar cambios' : 'Crear sucursal' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Modal confirmar eliminación de sucursal -->
+@if (sucAEliminar(); as target) {
+  <div class="modal-backdrop" (click)="cancelarEliminarSucursal()">
+    <div
+      class="modal-card confirm-card"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-header">
+        <h2>Eliminar sucursal</h2>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="cancelarEliminarSucursal()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <p class="confirm-text">
+        ¿Seguro que deseas eliminar la sucursal <strong>{{ target.nombre }}</strong>? Se aplicará
+        borrado lógico (soft delete).
+      </p>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="cancelarEliminarSucursal()"
+          [disabled]="savingSuc()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="confirmarEliminarSucursal()"
+          [disabled]="savingSuc()"
+        >
+          {{ savingSuc() ? 'Eliminando...' : 'Eliminar' }}
         </button>
       </div>
     </div>

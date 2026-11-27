@@ -195,13 +195,15 @@
                     >
                       {{ t.activo ? 'Desactivar' : 'Activar' }}
                     </button>
-                    <button
-                      type="button"
-                      class="btn-icon danger"
-                      (click)="solicitarEliminarTercero(t)"
-                    >
-                      Eliminar
-                    </button>
+                    @if (!esSoloGestorVentas()) {
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        (click)="solicitarEliminarTercero(t)"
+                      >
+                        Eliminar
+                      </button>
+                    }
                   </div>
                 </td>
               </tr>
@@ -300,13 +302,21 @@
 
           <!-- Selector múltiple de roles establecidos en la BD -->
           <div class="field full">
-            <span>Roles del tercero * (puedes seleccionar uno o varios)</span>
+            <span>
+              Roles del tercero *
+              {{
+                esSoloGestorVentas()
+                  ? '(como Gestor de ventas solo puedes asignar el rol Cliente)'
+                  : '(puedes seleccionar uno o varios)'
+              }}
+            </span>
             <div class="roles-picker">
               @for (rol of rolesDisponibles(); track rol.id) {
                 <button
                   type="button"
                   class="rol-chip"
                   [class.selected]="tieneRolSeleccionado(rol.id)"
+                  [disabled]="!esRolEditable(rol)"
                   (click)="toggleRolSeleccionado(rol.id)"
                 >
                   <span class="rol-check">{{ tieneRolSeleccionado(rol.id) ? '✓' : '+' }}</span>
