@@ -69,7 +69,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   ├── docker-compose.yml                 # PostgreSQL 17 aislado para desarrollo local
 │   ├── .env.example                       # Plantilla de variables de entorno
 │   ├── go.mod / go.sum
-│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000026, up/down)
+│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000031, up/down)
 │   │   ├── embed.go                       # //go:embed *.sql
 │   │   ├── 000001_init_usuarios.*         # paises, ciudades, empresas, sucursales, usuarios
 │   │   ├── 000002_init_crm.*              # monedas, orígenes, estados, motivos, leads, actividades, intereses
@@ -96,7 +96,12 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   │   ├── 000023_add_rol_gestor_ventas.*          # Rol GESTOR_VENTAS
 │   │   ├── 000024_add_rol_asesor_comercial.*       # Rol ASESOR_COMERCIAL
 │   │   ├── 000025_update_rol_asesor_comercial_solo_crm.* # ASESOR_COMERCIAL exclusivo CRM + permisos multi-rol aditivos
-│   │   └── 000026_add_rol_gestor_compras.*         # Rol GESTOR_COMPRAS
+│   │   ├── 000026_add_rol_gestor_compras.*         # Rol GESTOR_COMPRAS
+│   │   ├── 000027_init_lealtad_programas.*         # lealtad_programas, lealtad_programa_empresas y semilla "Lealtad Tesserak" (ipalenciab)
+│   │   ├── 000028_init_lealtad_reglas.*            # lealtad_reglas y regla estándar de Lealtad Tesserak (1 pt / $1.000)
+│   │   ├── 000029_init_lealtad_miembros_cuentas.*  # lealtad_miembros (identidad global) y lealtad_cuentas (saldos)
+│   │   ├── 000030_init_lealtad_transacciones_redenciones.* # lealtad_transacciones (ledger) y lealtad_redenciones
+│   │   └── 000031_lealtad_ventas_redencion_y_vencimientos.* # puntos_redimidos / descuento_lealtad en ven_ventas y vencimiento_procesado
 │   └── internal/
 │       ├── auth/                          # Login, bcrypt, JWT HS256, roles aditivos, aislamiento por sucursal y middlewares
 │       ├── config/                        # Carga de .env y variables de entorno
@@ -110,7 +115,8 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │       ├── terceros/                      # Terceros por empresa, asignación de roles globales y Consumidor Final
 │       ├── compras/                       # CRUD de compras acotado por sucursales autorizadas y entrada atómica a inventario
 │       ├── inventario/                    # Ubicaciones, stock materializado (inv_stock), ajustes y traslados acotados por sucursal
-│       ├── ventas/                        # CRUD de ventas acotado por sucursales autorizadas, IVA automático y salida de stock
+│       ├── ventas/                        # CRUD de ventas acotado por sucursales, IVA automático, salida de stock y lealtad (acumulación/redención/reverso)
+│       ├── lealtad/                       # Módulo de lealtad híbrido: planes, adhesiones, reglas, miembros, cuentas, ledger, redenciones, conciliación y vencimientos
 │       └── crm/                           # Módulo CRM completo (leads, oportunidades, campañas, configuración) acotado por sucursal
 │
 └── frontend/
@@ -129,7 +135,10 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
                 ├── dashboard/             # Panel principal con KPIs en vivo del CRM y accesos rápidos
                 ├── coming-soon/           # Pantalla placeholder para módulos pendientes
                 ├── administracion/
-                │   └── gestion-empresa/   # /gestion-empresa (consecutivos, CRUD sucursales, ubicaciones por sucursal, key UUID)
+                │   ├── gestion-empresa/   # /gestion-empresa (consecutivos, CRUD sucursales, ubicaciones por sucursal, key UUID)
+                │   └── planes-lealtad/    # /administracion/planes-lealtad (solo ADMINISTRADOR: planes, adhesiones, reglas, conciliación y vencimientos)
+                ├── lealtad/
+                │   └── miembros-cuentas/  # /lealtad (miembros globales, inscripción desde Terceros, cuentas, extracto, acumulación y redención)
                 ├── usuarios/              # /usuarios (CRUD multi-rol y multi-sucursal) y /mi-perfil (datos propios + contraseña)
                 ├── crm/                   # /crm/{leads, oportunidades, campanas, configuracion, resumen}
                 ├── productos/             # /productos/{catalogo, categorias, configuracion}
@@ -138,7 +147,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
                 ├── terceros/              # /terceros (terceros con chips de roles globales de solo lectura)
                 ├── compras/               # /compras (proveedores filtrados, consecutivo automático, soft delete)
                 ├── inventario/            # /inventario (vista por ubicación -> stock, ajustes, pérdidas, averías, devoluciones y traslados)
-                └── ventas/                # /ventas (Consumidor Final por defecto, cálculo automático de IVA, salida de stock, soft delete)
+                └── ventas/                # /ventas (precios automáticos desde listas de precios, redención de puntos, Consumidor Final, IVA, salida de stock)
 ```
 
 ---
@@ -217,6 +226,11 @@ Las migraciones están en `backend/migrations/`, se embeben en el binario median
 | `000024` | Rol Asesor comercial | Inserta rol de sistema `ASESOR_COMERCIAL` en `roles_sistema` |
 | `000025` | Asesor comercial solo CRM + multi-rol | Actualiza `ASESOR_COMERCIAL` a acceso exclusivo de CRM, combinable con múltiples roles (ej. `GESTOR_VENTAS`) |
 | `000026` | Rol Gestor de compras | Inserta rol de sistema `GESTOR_COMPRAS` (consultar, crear y modificar compras, combinable con otros roles) |
+| `000027` | Planes de lealtad y adhesiones | `lealtad_programas`, `lealtad_programa_empresas` y semilla global **Lealtad Tesserak** (`LEALTAD_TESSERAK`) administrada por `ipalenciab` |
+| `000028` | Reglas de acumulación de lealtad | `lealtad_reglas` (globales y overrides por empresa) y regla base de **Lealtad Tesserak** (`1 pt / $1.000`) |
+| `000029` | Miembros y cuentas de lealtad | `lealtad_miembros` (identidad global por documento) y `lealtad_cuentas` (billeteras de puntos) |
+| `000030` | Libro mayor y redenciones de lealtad | `lealtad_transacciones` (append-only ledger) y `lealtad_redenciones` (1:1 con movimiento) |
+| `000031` | Redención en ventas y vencimientos | Agrega `puntos_redimidos` y `descuento_lealtad` a `ven_ventas`, y `vencimiento_procesado` a `lealtad_transacciones` |
 
 El diagrama relacional completo y actualizado está en [tesserak_modelo_corregido.drawio](tesserak_modelo_corregido.drawio) (editable en [diagrams.net](https://app.diagrams.net/)) y la documentación detallada de convenciones de BD en [documentacion base de datos.md](documentacion%20base%20de%20datos.md).
 
@@ -248,8 +262,8 @@ Los usuarios pueden tener **uno o varios roles** en `usuario_roles`; los permiso
 
 | Rol (`codigo`) | Alcance y permisos |
 |---|---|
-| `ADMINISTRADOR` | Acceso total a la empresa, todas las sucursales, consecutivos, CRUD de sucursales, gestión de empresa y usuarios. Asignado automáticamente al primer usuario de cada empresa. |
-| `ADMINISTRADOR_SUCURSAL` | Acceso administrativo a todos los módulos operativos, ubicaciones y gestión de usuarios únicamente dentro de sus sucursales asignadas (no puede asignar rol `ADMINISTRADOR` ni modificar consecutivos/sucursales de empresa). |
+| `ADMINISTRADOR` | Acceso total a la empresa, todas las sucursales, consecutivos, CRUD de sucursales, **administración de planes de lealtad**, gestión de empresa y usuarios. Asignado automáticamente al primer usuario de cada empresa. |
+| `ADMINISTRADOR_SUCURSAL` | Acceso administrativo a todos los módulos operativos, ubicaciones y gestión de usuarios únicamente dentro de sus sucursales asignadas (sin acceso a administración de planes de lealtad, consecutivos ni sucursales de empresa; no puede asignar rol `ADMINISTRADOR`). |
 | `GESTOR_VENTAS` | Consultar, crear y modificar ventas (sin eliminar) y gestionar terceros únicamente con el rol `CLIENTE` (crear clientes o asignar rol `CLIENTE` a terceros existentes, sin eliminar). |
 | `ASESOR_COMERCIAL` | Acceso completo y exclusivo al módulo CRM (leads, oportunidades, campañas, actividades y configuración). Combinable con otros roles (ej. `GESTOR_VENTAS`). |
 | `GESTOR_COMPRAS` | Consultar, crear y modificar compras (sin eliminar). Combinable con otros roles. |
@@ -323,7 +337,21 @@ Los usuarios pueden tener **uno o varios roles** en `usuario_roles`; los permiso
 
 ### Ventas (`/api/v1/ventas`, requieren JWT)
 - `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/ventas` (soft delete).
-- Consecutivo automático (`VENTA`), cliente por defecto **Consumidor Final** (`222222222222`) si no se indica `cliente_id`, cálculo automático de impuesto desde `grupos_impuesto.tarifa` de cada artículo y salida atómica `SALIDA_VENTA` de `inv_stock` (los servicios y productos sin control de inventario no validan ni descuentan stock; si falta stock de un producto inventariable, toda la transacción hace rollback).
+- Consecutivo automático (`VENTA`), cliente por defecto **Consumidor Final** (`222222222222`), cálculo automático de impuesto desde `grupos_impuesto.tarifa`, autocompletado de precios desde listas de precios en frontend y salida atómica `SALIDA_VENTA` de `inv_stock`.
+- **Integración con Lealtad:** acepta `puntos_redimir` opcional en `POST /api/v1/ventas` (aplica `descuento_lealtad = puntos × valor_punto_redencion` y descuenta saldo con `FOR UPDATE`), acumula automáticamente puntos sobre el total neto pagado si el cliente coincide por `(pais_id, tipo_identificacion, numero_identificacion)` en un plan adherido, y genera reverso automático (`REVERSO`) al anular (`ANULADA`) o eliminar la venta.
+
+### Lealtad (`/api/v1/lealtad`, requieren JWT)
+- **Administración de planes (exclusivo `ADMINISTRADOR`; `ADMINISTRADOR_SUCURSAL` recibe `403`):**
+  - `GET /api/v1/lealtad/monedas`
+  - `GET / POST / GET :id / PATCH :id / DELETE :id` en `/api/v1/lealtad/programas` (plan global por defecto **Lealtad Tesserak** administrado por `ipalenciab`, protegido contra eliminación).
+  - `POST / PATCH / DELETE` en `/api/v1/lealtad/programas/:id/adherir` (`/adhesion`) y `GET /api/v1/lealtad/programas/:id/empresas`.
+  - `GET / POST / PATCH :reglaId / DELETE :reglaId` en `/api/v1/lealtad/programas/:id/reglas` (reglas globales del plan y overrides por empresa).
+  - `GET /api/v1/lealtad/programas/:id/conciliacion` (balance emitidos vs. redimidos por empresa aliada) y `POST /api/v1/lealtad/programas/:id/procesar-vencimientos`.
+- **Operación de lealtad (`CanManageOperacion` y consultas desde `CanAccessVentas`):**
+  - `GET /api/v1/lealtad/operacion/programas`, `/cuenta-cliente/:terceroId`, `/paises`, `/clientes`.
+  - `GET /api/v1/lealtad/miembros/buscar`, `POST /api/v1/lealtad/miembros`, `POST /api/v1/lealtad/miembros/desde-tercero`, `PATCH /api/v1/lealtad/miembros/:id`.
+  - `GET / POST / PATCH :id/estado` en `/api/v1/lealtad/cuentas`.
+  - `GET /api/v1/lealtad/cuentas/:id/transacciones`, `POST /api/v1/lealtad/cuentas/:id/acumular` y `POST /api/v1/lealtad/cuentas/:id/redimir`.
 
 ---
 
@@ -348,8 +376,10 @@ Los usuarios pueden tener **uno o varios roles** en `usuario_roles`; los permiso
 | `/terceros` | Implementado | Maestro de terceros con asignación de roles globales de solo lectura (`CLIENTE`, `PROVEEDOR`, `EMPLEADO`) |
 | `/compras` | Implementado | Registro de compras con proveedores filtrados, consecutivo automático, entrada a inventario y soft delete |
 | `/inventario` | Implementado | Vista por ubicaciones → detalle de stock (`inv_stock`), ajustes, pérdidas, averías, devoluciones y traslados internos |
-| `/ventas` | Implementado | Registro de ventas con Consumidor Final por defecto, cálculo automático de IVA, salida atómica de stock y soft delete |
+| `/ventas` | Implementado | Registro de ventas con precios automáticos desde listas de precios, redención de puntos de lealtad, Consumidor Final por defecto, cálculo automático de IVA y salida atómica de stock |
+| `/lealtad` | Implementado | Módulo operativo de lealtad: registro de miembros globales, inscripción desde Terceros, billeteras de puntos, extracto de movimientos, acumulación/ajustes y redención |
 | `/gestion-empresa` | Implementado | Prefijos de consecutivos y CRUD de sucursales (`ADMINISTRADOR`), ubicaciones/bodegas por sucursal (`ADMINISTRADOR` / `ADMINISTRADOR_SUCURSAL`) y key UUID de usuario |
+| `/administracion/planes-lealtad` | Implementado | Administración exclusiva `ADMINISTRADOR`: plan global **Lealtad Tesserak** (`ipalenciab`), planes propios, adhesiones, reglas de acumulación, conciliación de coalición y procesamiento de vencimientos |
 | `/usuarios` | Implementado | Administración de usuarios por empresa (`ADMINISTRADOR` y `ADMINISTRADOR_SUCURSAL` en su alcance): creación/edición, asignación de múltiples roles combinables y permisos por sucursal |
 | `/mi-perfil` | Implementado | Autogestión del perfil propio desde la tarjeta del usuario en el sidebar: edición de datos personales y cambio de contraseña validando la contraseña actual |
 
@@ -446,5 +476,5 @@ npm run build
 
 ## 11. Estado actual y hoja de ruta
 
-- **Implementado:** Infraestructura base, Auth JWT con RBAC multi-rol aditivo (`ADMINISTRADOR`, `ADMINISTRADOR_SUCURSAL`, `GESTOR_VENTAS`, `ASESOR_COMERCIAL`, `GESTOR_COMPRAS`, `USUARIO`) y aislamiento por sucursales autorizadas (`usuario_sucursales`), Empresas (con creación automática de `Consumidor Final`), Sucursales (CRUD con ubicación por defecto `BOD-<id>`), Usuarios UI y Mi perfil (con `key` UUID y cambio de contraseña), Gestión de empresa (prefijos de consecutivos, sucursales, ubicaciones por sucursal, key de usuario), CRM (Leads, Oportunidades, Campañas y Configuración), Productos y Servicios (Catálogo, Categorías, Listas de precios, Marcas e Impuestos), Terceros, Compras, Inventarios (`inv_stock`, ajustes y traslados) y Ventas (con cálculo automático de IVA y descuento atómico de stock).
-- **Próximos módulos:** Pipeline comercial (Kanban), Agenda de Actividades en UI, Resumen comercial y módulo de Lealtad.
+- **Implementado:** Infraestructura base, Auth JWT con RBAC multi-rol aditivo (`ADMINISTRADOR`, `ADMINISTRADOR_SUCURSAL`, `GESTOR_VENTAS`, `ASESOR_COMERCIAL`, `GESTOR_COMPRAS`, `USUARIO`) y aislamiento por sucursales autorizadas (`usuario_sucursales`), Empresas (con creación automática de `Consumidor Final`), Sucursales (CRUD con ubicación por defecto `BOD-<id>`), Usuarios UI y Mi perfil (con `key` UUID y cambio de contraseña), Gestión de empresa (prefijos de consecutivos, sucursales, ubicaciones por sucursal, key de usuario), CRM (Leads, Oportunidades, Campañas y Configuración), Productos y Servicios (Catálogo, Categorías, Listas de precios, Marcas e Impuestos), Terceros, Compras, Inventarios (`inv_stock`, ajustes y traslados), Ventas (precios automáticos desde listas de precios, cálculo automático de IVA, descuento atómico de stock e integración con lealtad) y **Lealtad** (plan global **Lealtad Tesserak** administrado por `ipalenciab`, planes locales/coalición, adhesiones, reglas de acumulación, miembros globales, cuentas, libro mayor, redenciones en Ventas con reverso automático, conciliación de coalición y vencimientos).
+- **Próximos módulos:** Pipeline comercial (Kanban), Agenda de Actividades en UI, Resumen comercial y módulos contratados por empresa (`modulos`/`modulo_empresa`).

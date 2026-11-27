@@ -19,7 +19,8 @@ backend/
 │   ├── productos/               # módulo artículos: productos, servicios y catálogos (marcas, impuestos, categorías)
 │   ├── terceros/                # módulo terceros: tercero_maestro, roles_tercero globales y tercero_empresa_roles
 │   ├── usuarios/                # módulo usuarios: CRUD, múltiples sucursales (usuario_sucursales), key UUID v4 y regeneración
-│   └── ventas/                  # módulo ventas: ven_ventas, ven_ventas_detalle, IVA automático y salida atómica de stock
+│   ├── ventas/                  # módulo ventas: ven_ventas, ven_ventas_detalle, IVA automático, salida de stock y hooks de lealtad
+│   └── lealtad/                 # módulo lealtad: planes, adhesiones, reglas, miembros globales, cuentas, ledger, redenciones, conciliación y vencimientos
 ├── migrations/                  # SQL versionado (golang-migrate), embebido en el binario
 └── docker-compose.yml           # PostgreSQL local
 ```
@@ -224,6 +225,35 @@ Requiere JWT. CRUD completo (`POST`, `GET`, `GET /:id`, `PATCH /:id`, `DELETE /:
 - **Consecutivo automático:** Generado con la secuencia `VENTA` de la empresa.
 - **Impuesto automático:** Cada línea calcula `impuesto = subtotal * (grupos_impuesto.tarifa / 100)` a partir del grupo de impuestos del artículo seleccionado.
 - **Salida atómica de inventario:** Al guardar en estado `REGISTRADA` o `PAGADA`, descuenta `inv_stock` (`SALIDA_VENTA`) dentro de la misma transacción. Los **servicios** (y productos sin `control_inventario`) no validan ni descuentan existencias; si algún producto inventariable no tiene stock suficiente, la transacción completa hace **rollback**.
+- **Integración atómica con Lealtad (`000031`):** Si se envía `puntos_redimir > 0`, valida saldo con `FOR UPDATE`, calcula `descuento_lealtad = puntos_redimir × valor_punto_redencion`, descuenta el saldo y guarda `puntos_redimidos` y `descuento_lealtad` en `ven_ventas`. A continuación acumula puntos automáticamente sobre el total neto pagado según las reglas activas del plan adherido. Al anular (`ANULADA`) o eliminar la venta se genera el movimiento `REVERSO` de forma idempotente.
+
+## API de Lealtad (`/api/v1/lealtad`)
+
+### Administración de planes y reglas (exclusivo `ADMINISTRADOR`; `ADMINISTRADOR_SUCURSAL` bloqueado con `403`)
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/lealtad/monedas` | Catálogo de monedas disponibles |
+| GET / POST | `/api/v1/lealtad/programas` | Listar planes visibles (incluye **Lealtad Tesserak** global) o crear plan (`LOCAL`, `COALICION`, o `GLOBAL` solo para `ipalenciab`) |
+| GET / PATCH / DELETE | `/api/v1/lealtad/programas/:id` | Consultar, editar o eliminar (soft delete). **Lealtad Tesserak** solo es editable por `ipalenciab` y no puede eliminarse |
+| POST / PATCH / DELETE | `/api/v1/lealtad/programas/:id/adherir` (`/adhesion`) | Adherir empresa al plan, configurar permisos (`permite_acumular`, `permite_redimir`, `es_programa_principal`) o retirar adhesión |
+| GET | `/api/v1/lealtad/programas/:id/empresas` | Listar empresas adheridas (propietario / `ipalenciab`) |
+| GET / POST / PATCH / DELETE | `/api/v1/lealtad/programas/:id/reglas` (`/:reglaId`) | Administrar reglas globales del plan (`empresa_id = NULL`) y overrides por empresa (`POR_MONTO`, `BONO_FIJO`, `MULTIPLICADOR`) |
+| GET | `/api/v1/lealtad/programas/:id/conciliacion` | Reporte de conciliación de coalición por empresa aliada (`fecha_desde`, `fecha_hasta`) |
+| POST | `/api/v1/lealtad/programas/:id/procesar-vencimientos` | Procesa lotes expirados (`fecha_vencimiento <= now()`) de forma idempotente y registra movimientos `VENCIMIENTO` |
+
+### Operación de lealtad (miembros, cuentas y transacciones)
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/lealtad/operacion/programas` | Planes activos adheridos de la empresa (`CanAccessVentas`) |
+| GET | `/api/v1/lealtad/operacion/cuenta-cliente/:terceroId` | Consulta cuenta y saldo de puntos del cliente por coincidencia exacta de `(pais_id, tipo_identificacion, numero_identificacion)` (`CanAccessVentas`) |
+| GET | `/api/v1/lealtad/operacion/paises` y `/clientes` | Países y clientes (`CLIENTE`) disponibles para inscripción |
+| GET | `/api/v1/lealtad/miembros/buscar` | Buscar miembro global por `(pais_id, tipo_identificacion, numero_identificacion)` |
+| POST | `/api/v1/lealtad/miembros` y `/miembros/desde-tercero` | Registrar o vincular miembro global y abrir cuenta en un plan adherido |
+| PATCH | `/api/v1/lealtad/miembros/:id` | Actualizar datos de contacto del miembro |
+| GET / POST / PATCH | `/api/v1/lealtad/cuentas` (`/:id/estado`) | Listar cuentas de planes adheridos, abrir cuenta y cambiar estado (`ACTIVA`, `BLOQUEADA`, `CERRADA`) |
+| GET | `/api/v1/lealtad/cuentas/:id/transacciones` | Extracto del libro mayor (`lealtad_transacciones`) |
+| POST | `/api/v1/lealtad/cuentas/:id/acumular` | Acumular por `monto_compra` (evaluando `lealtad_reglas`) o ajuste manual (`puntos` +/-) |
+| POST | `/api/v1/lealtad/cuentas/:id/redimir` | Redimir puntos con bloqueo `FOR UPDATE` y registro 1:1 en `lealtad_redenciones` |
 
 
 

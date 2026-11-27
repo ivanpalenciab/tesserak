@@ -294,3 +294,24 @@ Permite emitir consecutivos automáticos y sin duplicados por empresa y tipo de 
 - **Aislamiento por sucursales autorizadas y ubicación por defecto:**
   - Los usuarios con rol `ADMINISTRADOR` operan sobre todas las sucursales activas de su empresa; los demás roles quedan restringidos a las sucursales asignadas en `usuario_sucursales` en `ven_ventas`, `com_compras`, `inv_ubicaciones`, `inv_stock`, `inv_documentos`, `crm_leads`, `crm_oportunidades`, `usuarios` y `sucursales`.
   - Al crear una sucursal nueva vía `POST /api/v1/empresas/sucursales`, se crea automáticamente dentro de la misma transacción su ubicación por defecto `BOD-<sucursal_id>` (`Bodega Principal - <nombre>`) en `inv_ubicaciones`.
+
+---
+
+### Módulo de Lealtad (`000027`–`000031`)
+
+Arquitectura híbrida que soporta simultáneamente programas **locales** (`LOCAL`), de **coalición** (`COALICION`) y **globales de plataforma** (`GLOBAL`):
+
+- **Planes y adhesiones (`000027_init_lealtad_programas`):**
+  - `lealtad_programas`: define `codigo` único activo, `nombre`, `alcance`, `empresa_propietaria_id` (`NULL` para `GLOBAL`), `usuario_administrador_id`, `es_sistema`, `moneda_referencia_id`, `valor_punto_redencion`, `dias_vencimiento`, `estado` y vigencias (soft delete). Incluye la semilla del plan por defecto **`Lealtad Tesserak`** (`codigo = 'LEALTAD_TESSERAK'`, `GLOBAL`, `es_sistema = TRUE`, `valor_punto_redencion = 1.0000`, `dias_vencimiento = 365`), administrado por el usuario **`ipalenciab`**.
+  - `lealtad_programa_empresas`: relación N:M de adhesión con `rol_empresa` (`PROPIETARIA`/`ALIADA`), `permite_acumular`, `permite_redimir`, `es_programa_principal` (índice único parcial `ux_lealtad_empresa_principal` por empresa activa) y trazabilidad de alta/baja.
+  - **Control de acceso:** la administración de planes, reglas, conciliación y vencimientos es exclusiva del rol `ADMINISTRADOR` (`ADMINISTRADOR_SUCURSAL` no tiene acceso). Solo `ipalenciab` puede editar **Lealtad Tesserak** o consultar su conciliación y empresas adheridas.
+- **Reglas de acumulación (`000028_init_lealtad_reglas`):**
+  - `lealtad_reglas`: soporta reglas globales del programa (`empresa_id IS NULL`) y overrides específicos por empresa adherida (`empresa_id != NULL`), con tipos `POR_MONTO`, `BONO_FIJO` y `MULTIPLICADOR`, `puntos_por_monto`, `monto_base`, `compra_minima`, `prioridad` y vigencias evaluadas por día calendario (UTC). Siembra la regla base de **Lealtad Tesserak** (`1 punto por cada $1.000 COP`).
+- **Miembros globales y cuentas (`000029_init_lealtad_miembros_cuentas`):**
+  - `lealtad_miembros`: identidad global única por `(pais_id, upper(tipo_identificacion), lower(numero_identificacion))`, independiente de `empresa_id` para permitir acumulación y redención compartida entre empresas aliadas (exige coincidencia exacta de los 3 datos).
+  - `lealtad_cuentas`: billetera de puntos por `(programa_id, miembro_id)` con `saldo_puntos >= 0` y estado (`ACTIVA`, `BLOQUEADA`, `CERRADA`).
+- **Libro mayor, redenciones e integración con Ventas (`000030` y `000031`):**
+  - `lealtad_transacciones`: libro mayor inmutable (*append-only*) con `tipo_transaccion` (`ACUMULACION`, `REDENCION`, `AJUSTE_POSITIVO`, `AJUSTE_NEGATIVO`, `VENCIMIENTO`, `REVERSO`), `puntos`, `saldo_posterior`, `empresa_id`, `sucursal_id`, `venta_id`, `regla_id`, `fecha_vencimiento`, `vencimiento_procesado` (`000031`) y `observaciones`.
+  - `lealtad_redenciones`: documento 1:1 con `transaccion_id` único que registra `puntos_redimidos`, `monto_descontado = puntos_redimidos × valor_punto_redencion`, `moneda_id`, `venta_id` (opcional) y `estado` (`APLICADA`/`ANULADA`).
+  - **Integración atómica con `ven_ventas` (`000031`):** agrega `puntos_redimidos` y `descuento_lealtad` a `ven_ventas`. Al crear una venta (`REGISTRADA`/`PAGADA`) ejecuta opcionalmente `RedimirPorVentaTx` (con bloqueo `FOR UPDATE` y tope contra saldo y total) y luego `AcumularPorVentaTx` sobre el total neto pagado. Al anular (`ANULADA`) o eliminar la venta ejecuta `RevertirPorVentaTx` de forma idempotente.
+  - **Conciliación y vencimientos:** el administrador del plan puede consultar el balance por empresa aliada (emitidos vs. redimidos) y procesar lotes vencidos (`VENCIMIENTO`) de forma idempotente usando `vencimiento_procesado`.
