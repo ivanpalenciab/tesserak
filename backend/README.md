@@ -49,15 +49,19 @@ VALUES ('Tesserak SAS', 'Tesserak SAS', '900123456-7');
 INSERT INTO sucursales (empresa_id, nombre) VALUES (1, 'Principal');
 ```
 
-## API de empresas (`/api/v1/empresas`)
+## API de empresas (`/api/v1/empresas`) y sucursales (`/api/v1/empresas/sucursales`)
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/v1/empresas` | Crear empresa |
+| POST | `/api/v1/empresas` | Crear empresa (crea automáticamente `Consumidor Final`) |
 | GET | `/api/v1/empresas` | Listar. Filtros: `activo`, `q`, `page`, `page_size` |
 | GET | `/api/v1/empresas/:id` | Obtener por id |
 | PATCH | `/api/v1/empresas/:id` | Actualización parcial (solo campos enviados) |
 | DELETE | `/api/v1/empresas/:id` | **Soft delete** (`deleted_at = now()`), responde 204 |
+| GET | `/api/v1/empresas/sucursales` | Listar sucursales de la empresa autenticada (JWT; filtrado a sucursales autorizadas para no admin) |
+| POST | `/api/v1/empresas/sucursales` | Crear sucursal + ubicación por defecto `BOD-<id>` en la misma transacción (solo `ADMINISTRADOR`) |
+| PATCH | `/api/v1/empresas/sucursales/:id` | Actualizar nombre, dirección o estado de la sucursal (solo `ADMINISTRADOR`) |
+| DELETE | `/api/v1/empresas/sucursales/:id` | **Soft delete** de sucursal; impide eliminar la única sucursal de la empresa (solo `ADMINISTRADOR`) |
 
 Ejemplo:
 
@@ -80,16 +84,22 @@ curl -X POST http://localhost:8080/api/v1/empresas -H "Content-Type: application
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/v1/usuarios` | Crear usuario (la empresa se deduce de las sucursales asignadas en `sucursal_ids` o `sucursal_id`) |
-| GET | `/api/v1/usuarios` | Listar. Filtros: `empresa_id`, `sucursal_id` (vía `usuario_sucursales`), `activo`, `q`, `page`, `page_size` |
+| GET | `/api/v1/usuarios/roles` | Listar roles de sistema asignables (`ADMINISTRADOR`, `ADMINISTRADOR_SUCURSAL`, `GESTOR_VENTAS`, `ASESOR_COMERCIAL`, `GESTOR_COMPRAS`, `USUARIO`) |
+| GET | `/api/v1/usuarios/sucursales` | Listar sucursales activas accesibles por el usuario autenticado |
+| GET | `/api/v1/usuarios/mi-perfil` | Obtener perfil completo del usuario autenticado (JWT) |
+| PATCH | `/api/v1/usuarios/mi-perfil` | Actualizar datos propios (`nombres`, `apellidos`, `nombre_usuario`, `email`) y/o contraseña (exige `password_actual`) |
+| POST | `/api/v1/usuarios` | Crear usuario con múltiples roles (`rol_ids`) y sucursales (`sucursal_ids`). 1er usuario de empresa recibe `ADMINISTRADOR`; luego solo `ADMINISTRADOR` o `ADMINISTRADOR_SUCURSAL` |
+| GET | `/api/v1/usuarios` | Listar (acotado por empresa y, para no admin, a sus sucursales autorizadas). Filtros: `sucursal_id`, `activo`, `q`, `page`, `page_size` |
 | GET | `/api/v1/usuarios/:id` | Obtener por id |
-| PATCH | `/api/v1/usuarios/:id` | Actualización parcial (solo campos enviados; permite reemplazar `sucursal_ids`) |
+| PATCH | `/api/v1/usuarios/:id` | Actualización parcial (permite reemplazar `rol_ids` y `sucursal_ids`; solo `ADMINISTRADOR` o `ADMINISTRADOR_SUCURSAL` en su alcance) |
+| POST | `/api/v1/usuarios/:id/regenerar-key` | Regenerar `key` UUID v4 |
 | DELETE | `/api/v1/usuarios/:id` | **Soft delete** (`deleted_at = now()`), responde 204 |
 
 Ejemplo:
 
 ```powershell
-curl -X POST http://localhost:8080/api/v1/usuarios -H "Content-Type: application/json" -d '{
+curl -X POST http://localhost:8080/api/v1/usuarios -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" -d '{
+  "rol_ids": [3, 4],
   "sucursal_ids": [1, 2],
   "nombre_usuario": "jperez",
   "nombres": "Juan",
@@ -99,8 +109,11 @@ curl -X POST http://localhost:8080/api/v1/usuarios -H "Content-Type: application
 }'
 ```
 
-### Reglas de negocio
-- Un usuario pertenece a una `empresa` (`usuarios.empresa_id`) y puede tener acceso a **una o varias sucursales** de esa misma empresa mediante la tabla intermedia `usuario_sucursales` (la primera sucursal de `sucursal_ids` se marca como `es_principal = TRUE`). Se sigue aceptando `sucursal_id` por retrocompatibilidad.
+### Reglas de negocio (usuarios, roles y aislamiento por sucursal)
+- Un usuario pertenece a una `empresa` (`usuarios.empresa_id`), puede tener **uno o varios roles de sistema** en `usuario_roles` (permisos aditivos) y acceso a **una o varias sucursales** en `usuario_sucursales`.
+- El primer usuario creado en cada empresa recibe automáticamente `ADMINISTRADOR` (acceso total a todas las sucursales, consecutivos, sucursales y usuarios).
+- `ADMINISTRADOR_SUCURSAL` gestiona usuarios y ubicaciones únicamente dentro de sus sucursales asignadas, sin poder asignar `ADMINISTRADOR` global.
+- Todos los módulos operativos (`ventas`, `compras`, `inventario`, `crm`, `usuarios`, `sucursales`) filtran automáticamente los datos a las sucursales autorizadas del usuario (`AllowedSucursalIDs()`), devolviendo `403 sucursal_no_autorizada` ante accesos fuera de alcance.
 - Las FKs compuestas `(usuario_id, empresa_id)` y `(sucursal_id, empresa_id)` en `usuario_sucursales` garantizan a nivel de PostgreSQL que no se puedan mezclar sucursales de distintas empresas.
 - **Email único por empresa** (sin distinguir mayúsculas) entre usuarios no eliminados → `409 email_duplicado`.
 - **Nombre de usuario único por empresa** → `409 nombre_usuario_duplicado`.

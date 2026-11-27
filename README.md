@@ -69,7 +69,7 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   ├── docker-compose.yml                 # PostgreSQL 17 aislado para desarrollo local
 │   ├── .env.example                       # Plantilla de variables de entorno
 │   ├── go.mod / go.sum
-│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000020, up/down)
+│   ├── migrations/                        # Migraciones SQL versionadas (000001 a 000026, up/down)
 │   │   ├── embed.go                       # //go:embed *.sql
 │   │   ├── 000001_init_usuarios.*         # paises, ciudades, empresas, sucursales, usuarios
 │   │   ├── 000002_init_crm.*              # monedas, orígenes, estados, motivos, leads, actividades, intereses
@@ -90,22 +90,28 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
 │   │   ├── 000017_init_inventario.*                # inv_ubicaciones, inv_tipos_movimiento, inv_documentos, inv_movimientos_detalle, inv_stock
 │   │   ├── 000018_backfill_compras_a_inventario.*  # Migración de compras históricas hacia inv_documentos / inv_stock
 │   │   ├── 000019_init_ventas.*                    # ven_ventas, ven_ventas_detalle y backfill Consumidor Final (222222222222)
-│   │   └── 000020_usuario_sucursales.*             # Tabla intermedia usuario_sucursales (N:M) y eliminación de usuarios.sucursal_id
+│   │   ├── 000020_usuario_sucursales.*             # Tabla intermedia usuario_sucursales (N:M) y eliminación de usuarios.sucursal_id
+│   │   ├── 000021_init_roles_sistema.*             # roles_sistema (ADMINISTRADOR, USUARIO) y usuario_roles (N:M)
+│   │   ├── 000022_add_rol_admin_sucursal.*         # Rol ADMINISTRADOR_SUCURSAL
+│   │   ├── 000023_add_rol_gestor_ventas.*          # Rol GESTOR_VENTAS
+│   │   ├── 000024_add_rol_asesor_comercial.*       # Rol ASESOR_COMERCIAL
+│   │   ├── 000025_update_rol_asesor_comercial_solo_crm.* # ASESOR_COMERCIAL exclusivo CRM + permisos multi-rol aditivos
+│   │   └── 000026_add_rol_gestor_compras.*         # Rol GESTOR_COMPRAS
 │   └── internal/
-│       ├── auth/                          # Login, bcrypt, JWT HS256 y middleware RequireAuth
+│       ├── auth/                          # Login, bcrypt, JWT HS256, roles aditivos, aislamiento por sucursal y middlewares
 │       ├── config/                        # Carga de .env y variables de entorno
 │       ├── consecutivos/                  # Secuencias configurables (COMPRA, VENTA, INVENTARIO) con bloqueo transaccional
 │       ├── database/                      # Conexión GORM y runner de golang-migrate
 │       ├── httpx/                         # AppError uniforme y formateo de errores de validación
-│       ├── empresas/                      # CRUD de empresas (soft delete) + creación automática de Consumidor Final
-│       ├── usuarios/                      # CRUD de usuarios (N:M sucursales vía usuario_sucursales, bcrypt, key UUID, soft delete)
+│       ├── empresas/                      # CRUD de empresas y sucursales (con ubicación por defecto BOD-<id> y Consumidor Final)
+│       ├── usuarios/                      # CRUD de usuarios (N:M sucursales y roles_sistema), /mi-perfil, bcrypt, key UUID, soft delete
 │       ├── productos/                     # Artículos (productos físicos y servicios), categorías, marcas, impuestos y catálogos
 │       ├── precios/                       # Listas de precios y detalle por artículo
 │       ├── terceros/                      # Terceros por empresa, asignación de roles globales y Consumidor Final
-│       ├── compras/                       # CRUD de compras con consecutivo automático y entrada atómica a inventario
-│       ├── inventario/                    # Ubicaciones, stock materializado (inv_stock), ajustes, traslados y hooks de compras/ventas
-│       ├── ventas/                        # CRUD de ventas con consecutivo automático, IVA automático y salida atómica de inventario
-│       └── crm/                           # Módulo CRM completo (leads, oportunidades, campañas, configuración)
+│       ├── compras/                       # CRUD de compras acotado por sucursales autorizadas y entrada atómica a inventario
+│       ├── inventario/                    # Ubicaciones, stock materializado (inv_stock), ajustes y traslados acotados por sucursal
+│       ├── ventas/                        # CRUD de ventas acotado por sucursales autorizadas, IVA automático y salida de stock
+│       └── crm/                           # Módulo CRM completo (leads, oportunidades, campañas, configuración) acotado por sucursal
 │
 └── frontend/
     ├── Dockerfile / nginx.conf            # Build Angular + servidor estático Nginx
@@ -114,16 +120,17 @@ La aplicación sigue una arquitectura **monorepo cliente-servidor** con separaci
         ├── environments/environment.ts    # URL base de la API (http://localhost:8080/api/v1)
         ├── styles.scss                    # Variables CSS globales (--primary, --bg-page, etc.)
         └── app/
-            ├── app.routes.ts              # Rutas lazy-loaded protegidas por authGuard / guestGuard
+            ├── app.routes.ts              # Rutas lazy-loaded protegidas por guards de autenticación y roles aditivos
             ├── app.config.ts              # provideRouter, provideHttpClient(withInterceptors([authInterceptor]))
-            ├── core/auth/                 # AuthService (signals), auth.interceptor, auth.guard, auth.models
-            ├── layout/main-layout/        # Shell principal: sidebar con submenús desplegables, topbar, responsive
+            ├── core/auth/                 # AuthService (signals y capacidades aditivas), auth.interceptor, guards, auth.models
+            ├── layout/main-layout/        # Shell principal: sidebar dinámico por roles, tarjeta clickeable a /mi-perfil, topbar
             └── features/
                 ├── auth/login/            # Pantalla de inicio de sesión
                 ├── dashboard/             # Panel principal con KPIs en vivo del CRM y accesos rápidos
                 ├── coming-soon/           # Pantalla placeholder para módulos pendientes
                 ├── administracion/
-                │   └── gestion-empresa/   # /gestion-empresa (prefijos de consecutivos, ubicaciones por sucursal, key de usuario)
+                │   └── gestion-empresa/   # /gestion-empresa (consecutivos, CRUD sucursales, ubicaciones por sucursal, key UUID)
+                ├── usuarios/              # /usuarios (CRUD multi-rol y multi-sucursal) y /mi-perfil (datos propios + contraseña)
                 ├── crm/                   # /crm/{leads, oportunidades, campanas, configuracion, resumen}
                 ├── productos/             # /productos/{catalogo, categorias, configuracion}
                 ├── precios/
@@ -221,13 +228,32 @@ Base URL local: `http://localhost:8080`
 
 ### Salud y Autenticación
 - `GET /health` — Verifica conectividad con PostgreSQL.
-- `POST /api/v1/auth/login` — Autenticación por email o usuario + password (+ `identificador_fiscal` opcional). Retorna JWT HS256 y datos del usuario (incluyendo `sucursal_ids` asignadas y `sucursal_id` principal).
+- `POST /api/v1/auth/login` — Autenticación por email o usuario + password (+ `identificador_fiscal` opcional). Retorna JWT HS256 y datos del usuario (`roles`, flags de rol, `sucursal_ids` autorizadas y `sucursal_id` principal). Para `ADMINISTRADOR`, resuelve automáticamente todas las sucursales activas de su empresa.
 
-### Empresas (`/api/v1/empresas`) y Usuarios (`/api/v1/usuarios`)
-- `POST`, `GET` (filtros + paginación), `GET /:id`, `PATCH /:id`, `DELETE /:id` (soft delete).
-- Al crear una empresa (`POST /api/v1/empresas`) se crea automáticamente el tercero por defecto **Consumidor Final** (`222222222222`, rol único `CLIENTE`).
-- En usuarios, `POST` y `PATCH` aceptan múltiples sucursales mediante `sucursal_ids` (manteniendo `sucursal_id` por retrocompatibilidad) almacenadas en `usuario_sucursales`; todas las sucursales deben pertenecer a la misma empresa.
-- `POST /api/v1/usuarios/:id/regenerar-key` — Regenera la `key` (UUID v4) del usuario.
+### Empresas (`/api/v1/empresas`), Sucursales (`/api/v1/empresas/sucursales`) y Usuarios (`/api/v1/usuarios`)
+- **Empresas:** `POST`, `GET` (filtros + paginación), `GET /:id`, `PATCH /:id`, `DELETE /:id` (soft delete). Al crear una empresa se crea automáticamente **Consumidor Final** (`222222222222`, rol único `CLIENTE`).
+- **Sucursales (requieren JWT; `POST/PATCH/DELETE` exclusivos `ADMINISTRADOR`):**
+  - `GET /api/v1/empresas/sucursales` — Lista las sucursales de la empresa (acotado a sucursales autorizadas para no administradores).
+  - `POST /api/v1/empresas/sucursales` — Crea una sucursal y **genera automáticamente** su ubicación por defecto `BOD-<sucursal_id>` (`Bodega Principal - <nombre>`) en `inv_ubicaciones` dentro de la misma transacción.
+  - `PATCH /api/v1/empresas/sucursales/:id` y `DELETE /api/v1/empresas/sucursales/:id` (soft delete; impide eliminar la única sucursal de la empresa).
+- **Usuarios y Roles de Sistema:**
+  - `GET /api/v1/usuarios/roles` — Catálogo de roles de sistema asignables (`ADMINISTRADOR`, `ADMINISTRADOR_SUCURSAL`, `GESTOR_VENTAS`, `ASESOR_COMERCIAL`, `GESTOR_COMPRAS`, `USUARIO`).
+  - `GET /api/v1/usuarios/sucursales` — Sucursales activas accesibles por el usuario autenticado.
+  - `GET / PATCH /api/v1/usuarios/mi-perfil` — Autogestión del perfil propio (`nombres`, `apellidos`, `nombre_usuario`, `email`) y cambio de contraseña verificando obligatoriamente `password_actual`.
+  - `POST / GET / GET :id / PATCH :id / DELETE :id` en `/api/v1/usuarios` — Soportan múltiples roles combinables (`rol_ids`) y múltiples sucursales (`sucursal_ids`). El primer usuario de cada empresa recibe automáticamente `ADMINISTRADOR`; a partir de ahí solo `ADMINISTRADOR` (toda la empresa) o `ADMINISTRADOR_SUCURSAL` (solo dentro de sus sucursales asignadas) pueden gestionar usuarios.
+  - `POST /api/v1/usuarios/:id/regenerar-key` — Regenera la `key` (UUID v4) del usuario.
+
+### Roles de Sistema (RBAC Multi-rol Aditivo) y Aislamiento por Sucursal
+Los usuarios pueden tener **uno o varios roles** en `usuario_roles`; los permisos se suman entre sí y todos los módulos operativos (`ventas`, `compras`, `inventario`, `crm`, `usuarios`, `sucursales`) filtran los datos únicamente a las sucursales autorizadas del usuario:
+
+| Rol (`codigo`) | Alcance y permisos |
+|---|---|
+| `ADMINISTRADOR` | Acceso total a la empresa, todas las sucursales, consecutivos, CRUD de sucursales, gestión de empresa y usuarios. Asignado automáticamente al primer usuario de cada empresa. |
+| `ADMINISTRADOR_SUCURSAL` | Acceso administrativo a todos los módulos operativos, ubicaciones y gestión de usuarios únicamente dentro de sus sucursales asignadas (no puede asignar rol `ADMINISTRADOR` ni modificar consecutivos/sucursales de empresa). |
+| `GESTOR_VENTAS` | Consultar, crear y modificar ventas (sin eliminar) y gestionar terceros únicamente con el rol `CLIENTE` (crear clientes o asignar rol `CLIENTE` a terceros existentes, sin eliminar). |
+| `ASESOR_COMERCIAL` | Acceso completo y exclusivo al módulo CRM (leads, oportunidades, campañas, actividades y configuración). Combinable con otros roles (ej. `GESTOR_VENTAS`). |
+| `GESTOR_COMPRAS` | Consultar, crear y modificar compras (sin eliminar). Combinable con otros roles. |
+| `USUARIO` | Acceso operativo estándar acotado a sus sucursales asignadas. |
 
 ### CRM — Núcleo y Catálogos (`/api/v1/crm`)
 - `GET /api/v1/crm/resumen?empresa_id=` — KPIs del embudo, conversión, valor estimado, etapas, temperatura y actividades pendientes/vencidas.
@@ -323,8 +349,9 @@ Base URL local: `http://localhost:8080`
 | `/compras` | Implementado | Registro de compras con proveedores filtrados, consecutivo automático, entrada a inventario y soft delete |
 | `/inventario` | Implementado | Vista por ubicaciones → detalle de stock (`inv_stock`), ajustes, pérdidas, averías, devoluciones y traslados internos |
 | `/ventas` | Implementado | Registro de ventas con Consumidor Final por defecto, cálculo automático de IVA, salida atómica de stock y soft delete |
-| `/gestion-empresa` | Implementado | Administración de prefijos de consecutivos, ubicaciones/bodegas por sucursal y key UUID de usuario (**exclusivo `ADMINISTRADOR`**) |
-| `/usuarios` | Implementado | Administración de usuarios por empresa: creación/edición (solo `ADMINISTRADOR`), asignación de rol de sistema y selección de sucursales específicas para no administradores |
+| `/gestion-empresa` | Implementado | Prefijos de consecutivos y CRUD de sucursales (`ADMINISTRADOR`), ubicaciones/bodegas por sucursal (`ADMINISTRADOR` / `ADMINISTRADOR_SUCURSAL`) y key UUID de usuario |
+| `/usuarios` | Implementado | Administración de usuarios por empresa (`ADMINISTRADOR` y `ADMINISTRADOR_SUCURSAL` en su alcance): creación/edición, asignación de múltiples roles combinables y permisos por sucursal |
+| `/mi-perfil` | Implementado | Autogestión del perfil propio desde la tarjeta del usuario en el sidebar: edición de datos personales y cambio de contraseña validando la contraseña actual |
 
 ---
 
@@ -419,5 +446,5 @@ npm run build
 
 ## 11. Estado actual y hoja de ruta
 
-- **Implementado:** Infraestructura base, Auth JWT, Empresas (con creación automática de `Consumidor Final`), Usuarios (con `key` UUID), Gestión de empresa (prefijos de consecutivos, ubicaciones por sucursal, key de usuario), CRM (Leads, Oportunidades, Campañas y Configuración), Productos y Servicios (Catálogo, Categorías, Listas de precios, Marcas e Impuestos), Terceros, Compras, Inventarios (`inv_stock`, ajustes y traslados) y Ventas (con cálculo automático de IVA y descuento atómico de stock).
-- **Próximos módulos:** Pipeline comercial (Kanban), Agenda de Actividades en UI, Resumen comercial, gestión UI de Usuarios y módulo de Lealtad.
+- **Implementado:** Infraestructura base, Auth JWT con RBAC multi-rol aditivo (`ADMINISTRADOR`, `ADMINISTRADOR_SUCURSAL`, `GESTOR_VENTAS`, `ASESOR_COMERCIAL`, `GESTOR_COMPRAS`, `USUARIO`) y aislamiento por sucursales autorizadas (`usuario_sucursales`), Empresas (con creación automática de `Consumidor Final`), Sucursales (CRUD con ubicación por defecto `BOD-<id>`), Usuarios UI y Mi perfil (con `key` UUID y cambio de contraseña), Gestión de empresa (prefijos de consecutivos, sucursales, ubicaciones por sucursal, key de usuario), CRM (Leads, Oportunidades, Campañas y Configuración), Productos y Servicios (Catálogo, Categorías, Listas de precios, Marcas e Impuestos), Terceros, Compras, Inventarios (`inv_stock`, ajustes y traslados) y Ventas (con cálculo automático de IVA y descuento atómico de stock).
+- **Próximos módulos:** Pipeline comercial (Kanban), Agenda de Actividades en UI, Resumen comercial y módulo de Lealtad.
